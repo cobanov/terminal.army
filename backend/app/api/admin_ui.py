@@ -69,7 +69,7 @@ def _forbidden(your_user: str, admin: str) -> HTMLResponse:
   <p><a href="/dashboard">back to dashboard</a></p>
 </div>
 """
-    return HTMLResponse(_shell("Forbidden &middot; Space Galactic", body), status_code=403)
+    return HTMLResponse(_shell("Forbidden &middot; sakusen 策戦", body), status_code=403)
 
 
 # ============================================================================
@@ -127,7 +127,7 @@ async def admin_dashboard(
     body = f"""
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SPACE GALACTIC <span style="color:#ef4444;">[admin]</span></span>
+    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
     <span class="topbar-user">commander <b>{admin_user.username}</b></span>
   </div>
   <div class="topbar-right">
@@ -149,7 +149,7 @@ async def admin_dashboard(
   </table>
 </div>
 """
-    return HTMLResponse(_shell("Admin &middot; Space Galactic", body))
+    return HTMLResponse(_shell("Admin &middot; sakusen 策戦", body))
 
 
 @router.post("/admin/universe/speed-form")
@@ -218,7 +218,7 @@ async def admin_user_edit(
     body = f"""
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SPACE GALACTIC <span style="color:#ef4444;">[admin]</span></span>
+    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
     <span class="topbar-user">editing <b>{target.username}</b></span>
   </div>
   <div class="topbar-right">
@@ -426,7 +426,7 @@ async def admin_planet_edit(
     body = f"""
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SPACE GALACTIC <span style="color:#ef4444;">[admin]</span></span>
+    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
     <span class="topbar-user">editing planet <b>{planet.name}</b> ({planet.galaxy}:{planet.system}:{planet.position})</span>
   </div>
   <div class="topbar-right">

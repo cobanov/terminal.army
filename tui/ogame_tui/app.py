@@ -9,7 +9,7 @@ from ogame_tui.screens.repl import ReplScreen
 
 
 class OGameApp(App):
-    TITLE = "Space Galactic"
+    TITLE = "sakusen 策戦"
 
     def __init__(self, base_url: str = "http://localhost:8000", token: str | None = None) -> None:
         super().__init__()

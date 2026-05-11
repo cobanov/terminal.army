@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# Space Galactic - tek-komut kurulum (uv + ogame)
+# Sakusen 策戦 — tek komutluk kurulum (uv + sakusen)
 #
 # Kullanim (public repo):
 #   curl -fsSL https://raw.githubusercontent.com/cobanov/space-galactic-tui/main/scripts/install.sh | sh
 #
 # Kullanim (private repo, SSH ile):
-#   curl -fsSL <url> | OGAME_REPO="git+ssh://git@github.com/cobanov/space-galactic-tui.git" sh
-#
-# Kullanim (yerel kopya):
-#   ./scripts/install.sh
+#   OGAME_REPO="git+ssh://git@github.com/cobanov/space-galactic-tui.git" sh install.sh
 #
 # Env override:
 #   OGAME_REPO  : git URL (default: HTTPS public repo URL)
@@ -26,7 +23,7 @@ green() { printf "\033[32m%s\033[0m\n" "$*"; }
 yellow() { printf "\033[33m%s\033[0m\n" "$*"; }
 red() { printf "\033[31m%s\033[0m\n" "$*" >&2; }
 
-bold "Space Galactic - install"
+bold "Sakusen 策戦 · install"
 echo "  repo : $OGAME_REPO"
 echo "  ref  : $OGAME_REF"
 echo "  py   : $OGAME_PY"
@@ -56,12 +53,11 @@ bold "uv version: $(uv --version)"
 # 2. Python varsa kullan, yoksa indir
 uv python install "$OGAME_PY" >/dev/null 2>&1 || true
 
-# 3. ogame'i tool olarak kur
-bold "ogame kuruluyor..."
+# 3. sakusen'i tool olarak kur
+bold "sakusen kuruluyor..."
 uv tool install --reinstall --python "$OGAME_PY" "${OGAME_REPO}@${OGAME_REF}"
 
 # 4. PATH guvencesi
-TOOL_BIN="$(uv tool dir 2>/dev/null || echo "$HOME/.local/bin")"
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *)
@@ -74,8 +70,8 @@ echo
 green "✓ Kurulum tamam."
 echo
 echo "Oynamaya basla:"
-echo "  ogame                                 # solo (yerel SQLite)"
-echo "  ogame --remote https://example.com    # multiplayer"
-echo "  ogame-server                          # multiplayer host"
+echo "  sakusen                                       # solo (yerel SQLite)"
+echo "  SAKUSEN_BACKEND=https://sakusen.space sakusen # multiplayer"
+echo "  sakusen-server                                # multiplayer host"
 echo
-echo "Daha fazlasi icin: ogame --help"
+echo "Daha fazlasi icin: sakusen --help"

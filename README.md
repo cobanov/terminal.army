@@ -1,246 +1,235 @@
-# Space Galactic
+# sakusen 策戦
 
-OGame'in TUI tabanli, online (multiplayer) Python klonu. Terminalden oynanir, backend FastAPI'dir, ayni API ileride bir web istemcisine de hizmet edecektir.
+Terminal-native multiplayer space strategy. Python + FastAPI backend, Textual TUI client. The same REST API will later serve a web frontend.
 
-## Mimari ozeti
+> **策戦 / sakusen** — Japanese for "strategy, military operation".
+
+## Architecture
 
 ```
-+---------+        +---------+        +---------+
-| ogame   |  ...   | ogame   |  ...   | ogame   |    <- oyuncular (her makinada TUI)
-| (Mert)  |        | (Ali)   |        | (Veli)  |
-+----+----+        +----+----+        +----+----+
-     |                  |                  |
-     +---- HTTPS / HTTP-+------------------+
-                        |
-                        v
-            +-----------------------------+
-            | ana backend (container)     |
-            | http://operator-host:9931   |
-            | (FastAPI + Postgres)        |
-            +-----------------------------+
++----------+      +----------+      +----------+
+| sakusen  |  ..  | sakusen  |  ..  | sakusen  |    <- players (terminal TUI)
+| (mert)   |      | (ali)    |      | (veli)   |
++----+-----+      +----+-----+      +----+-----+
+     |                 |                 |
+     +-- HTTPS/HTTP ---+-----------------+
+                       |
+            +----------v-----------+
+            | main backend (host)  |
+            | sakusen.space:9931   |
+            | FastAPI + Postgres   |
+            +----------------------+
 ```
 
-- **Operator** (siz) `docker compose up -d` ile container'i kalici calistirir
-- **Oyuncular** `ogame` komutuyla baglanir; `OGAME_BACKEND` env var'i ile sunucu adresini set ederler
-- Solo mod hala mevcut: `ogame --solo` ile internet gerekmeden lokal SQLite
+- **Operator** runs `docker compose up -d` to host the backend permanently
+- **Players** install the `sakusen` CLI and point it at the server via `SAKUSEN_BACKEND`
+- **Solo offline mode** still works: `sakusen --solo` spawns a private SQLite backend
 
 ---
 
-## Oyuncu kurulumu (tek komut)
+## Player install (one command)
 
-### 1. uv kur (yoksa)
+### 1. Install uv (if missing)
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. ogame'i tool olarak kur
+### 2. Install sakusen
 
-Private repo donemi (SSH ile):
+Private repo (SSH):
 
 ```bash
 uv tool install --python 3.12 "git+ssh://git@github.com/cobanov/space-galactic-tui.git"
 ```
 
-Public olunca:
+Public (or use the install script):
 
 ```bash
 uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"
-# veya
+# or:
 curl -fsSL https://raw.githubusercontent.com/cobanov/space-galactic-tui/main/scripts/install.sh | sh
 ```
 
-### 3. Backend URL'ini set et
-
-`.zshrc` veya `.bashrc` dosyana ekle:
+### 3. Point at the main server
 
 ```bash
-export OGAME_BACKEND="http://OPERATOR-HOST:9931"
+export SAKUSEN_BACKEND="https://sakusen.space"   # production
+# or: export SAKUSEN_BACKEND="http://localhost:9931" if you self-host
 ```
 
-### 4. Hesap ac ve oyna
+(The legacy `OGAME_BACKEND` env var still works as a fallback.)
+
+### 4. Launch + sign in
 
 ```bash
-ogame
+sakusen
 ```
 
-Ilk calistirmada terminal sana bir URL gosterir:
+First run prints a URL like `https://sakusen.space/login?code=…`. Open it in
+your browser, sign in or create an account; the terminal polls and picks up
+your session within ~2 seconds. The token is saved to
+`~/.config/sakusen/credentials.json` (mode 0600) so future runs are silent.
+
+(`ogame` is kept as a transitional alias of `sakusen` and will be removed
+in a future release.)
+
+### 5. Play
+
+The TUI is a single-screen REPL — Claude Code style slash commands:
 
 ```
-Space Galactic
---------------
-
-Oynamak icin bir key gerekiyor.
-
-1. Tarayicinda bu URL'i ac:
-   http://operator-host:9931/signup
-
-2. Formu doldur, cikan key'i kopyala.
-
-3. Asagiya yapistir:
-
-Key>
+> /help                            # all commands
+> /planet                          # current planet detail
+> /buildings                       # building levels + cost
+> /upgrade metal_mine              # +1 level
+> /research                        # tech list
+> /tree                            # tech tree with prereqs
+> /galaxy 4:28                     # system view
+> /queue                           # active build/research queue
+> /cancel 42                       # refund
+> /ships                           # shipyard
+> /build small_cargo 10            # batch construct
+> /fleets                          # active fleet movements
+> /espionage 1:42:8                # send probes
+> /attack 1:42:8 cruiser:5         # attack
+> /msg                             # conversation list
+> /msg <user>                      # WhatsApp-style chat
+> /logs                            # recent planet events
+> /speed                           # universe speed (admin only)
+> /logout                          # forget saved key
+> /q                               # exit
 ```
 
-Tarayicida formu doldur, cikan uzun JWT key'i kopyala, terminale yapistir Enter. Key
-`~/.config/ogame/credentials.json` icine 0o600 izniyle kaydedilir, bir daha sormaz.
-
-### 5. Oyna - slash commands
-
-TUI tek bir REPL ekranidir, Claude Code tarzi slash komutlar:
-
-```
-> /help                            # tum komutlar
-> /planet                          # mevcut gezegen detayi
-> /buildings                       # bina seviyeleri + cost
-> /upgrade metal_mine              # 1 seviye yukselt
-> /research                        # tum teknolojiler
-> /research energy                 # tek seviye yukselt
-> /galaxy 4:28                     # sistem gorunumu
-> /queue                           # aktif insaat/arastirma
-> /cancel 42                       # queue id 42 iptal et
-> /planets                         # tum gezegenlerim
-> /switch 7                        # aktif gezegeni 7'ye degistir
-> /me                              # kim oldugum
-> /logout                          # key sil ve cik
-> /q                               # cikis
-```
-
-Kisaltmalar: `/b` = `/buildings`, `/r` = `/research`, `/g` = `/galaxy`, `/p` = `/planet`,
-`/u` = `/upgrade`. Slash yazmasan da olur (`buildings` aynisi).
-
-Status bar (ust): gezegen, kaynaklar, +M/+C/+D per saat, enerji dengesi.
+Slash optional: typing `queue` is the same as `/queue`. Tab autocompletes.
+Up/Down navigate command history (or popup, if visible). The autosuggester
+shows a ghost completion from history; Right/End/Tab accept it.
 
 ### Solo (offline)
 
 ```bash
-ogame --solo                       # lokal SQLite, ~/.local/share/ogame/
-ogame --logout                     # backend'den kayitli key'i sil
-```
-
-### Komut ozet
-
-```bash
-ogame                              # OGAME_BACKEND'e bagla
-ogame --remote http://host:9931    # explicit URL
-ogame --solo                       # offline solo
-ogame --logout                     # bu backend icin key'i unut
-ogame-server                       # backend'i sun (operator icin)
-ogame --help
+sakusen --solo                     # local SQLite at ~/.local/share/sakusen
+sakusen --logout                   # forget the saved token
 ```
 
 ---
 
-## Operator kurulumu (ana backend host)
-
-Container 9931 portunda calisir, postgres ile birlikte.
+## Operator install (host the main server)
 
 ```bash
 git clone git@github.com:cobanov/space-galactic-tui.git
 cd space-galactic-tui
 
-# 1. .env yarat ve JWT secret uret
 cp .env.example .env
-sed -i.bak "s|change-me-generate.*|$(openssl rand -hex 32)|" .env
+# Edit .env:
+#   JWT_SECRET=$(openssl rand -hex 32)
+#   ADMIN_USERNAME=<your-username>   <- gives /admin + /speed access
 
-# 2. Container'i baslat
-make server-up                # docker compose up -d --build
-make server-logs              # tail -f
-
-# 3. Health check
-curl http://localhost:9931/health
+make server-up                     # postgres + backend container, host port 9931
+make server-logs
 ```
 
-`make server-up` postgres + backend'i ayaga kaldirir, host port `9931` -> container port `8000`. Ayar gerekirse `HOST_PORT=9000 docker compose up -d`.
+Health check: `curl http://localhost:9931/health` → `{"status":"ok"}`.
 
-### Operator komutlari
+| Make target | What it does |
+|-------------|--------------|
+| `make server-up` | postgres + backend (build + start) |
+| `make server-down` | stop both |
+| `make server-restart` | restart backend (no env reread) |
+| `make server-reload` | recreate backend (reads new `.env`) |
+| `make server-build` | rebuild backend image |
+| `make server-logs` | tail backend logs |
+| `make server-ps` | status |
 
-| Komut                  | Aciklama                          |
-|------------------------|-----------------------------------|
-| `make server-up`       | postgres + backend (build + start)|
-| `make server-down`     | her ikisini durdur                |
-| `make server-restart`  | sadece backend'i restart          |
-| `make server-build`    | backend image'i tekrar build et   |
-| `make server-logs`     | backend logs -f                   |
-| `make server-ps`       | durum                             |
+**`.env` changes need `make server-reload`, not `restart`** — `restart` keeps the old env.
 
-### Backend'i internete acmak
+### Exposing to the public
 
-LAN icin: TUI'lerden `http://YOUR-LAN-IP:9931` kullanir.
+- **Tailscale**: easiest, no static IP, 5-minute setup
+- **Cloudflare Tunnel**: TLS + named subdomain (e.g. `sakusen.space` → your home box)
+- **Caddy / Nginx + DNS**: reverse proxy with Let's Encrypt
 
-Internet icin (tavsiye):
+### Admin
 
-- **Tailscale**: `tailscale up`, sonra herkes `OGAME_BACKEND=http://your-tailnet-host:9931`
-- **Cloudflare Tunnel**: kalici subdomain ile, TLS dahil
-- **Caddy + DNS**: reverse proxy + Let's Encrypt
+If `ADMIN_USERNAME` is set in `.env`, that user sees:
+- `[admin]` link in the dashboard topbar → `/admin` panel
+- TUI `/speed N` command (universe speed multiplier, 1..100)
+- Web admin: edit user tech levels, planet resources, buildings, ships, defenses; create planets; delete planets
 
-Tailscale en pratigi: kurulum 5 dk, statik IP yok problemi yok, JWT secret yine de set et.
-
-### Verileri yedekle / sifirla
+### Backup / reset
 
 ```bash
-docker compose exec postgres pg_dump -U ogame ogame > backup.sql       # backup
-docker compose down -v                                                 # sifirla (volume sil)
+docker compose exec postgres pg_dump -U ogame ogame > backup.sql
+docker compose down -v             # WIPES the postgres volume (irreversible)
 ```
 
 ---
 
-## Gelistirme
+## Development
 
 ```bash
 git clone git@github.com:cobanov/space-galactic-tui.git
 cd space-galactic-tui
-make install      # uv venv + dev deps
-make up           # sadece postgres
-make dev          # uv run uvicorn --reload (host'ta, port 8000)
-make test         # 30 test
+make install                       # uv venv + dev deps
+make up                            # postgres only (run backend on host)
+make dev                           # uvicorn --reload on :8000
+make test                          # 32 tests
 ```
 
-`make dev` 8000'de calisir; container 9931'de paralel calisabilir (port catismasi yok).
+`make dev` runs on port 8000 (host process); the docker container runs on 9931.
+They can coexist for testing.
 
-| Komut           | Aciklama                          |
-|-----------------|-----------------------------------|
-| `make install`  | uv venv + dev bagimliliklari      |
-| `make dev`      | host'ta uvicorn reload (8000)     |
-| `make tui`      | TUI (lokal dev backend'e baglanir)|
-| `make test`     | pytest                            |
-| `make lint`     | ruff check + format check         |
-| `make typecheck`| mypy                              |
-| `make clean`    | .venv + cache temizle             |
+## Mechanics
 
----
+- **Backend headless**, TUI is one of many clients. Same REST API will serve a future web frontend.
+- **Lazy resource update**: not tick-based; every API touch advances production
+  from `resources_last_updated_at` using OGame formulas.
+- **Pure formulas**: `backend/app/game/` is DB-free, mockable, unit-tested
+  against published Fandom values (Metal Mine, Crystal Mine, Deuterium
+  Synthesizer, Solar Plant, Solar Satellite, Fusion Reactor, energy
+  consumption all match to the floor/ceil).
+- **Schema-first**: all OGame constants live in `game/constants.py`.
 
-## Mimari prensipleri
+See `CLAUDE.md` for the formula source-of-truth (OGame Fandom Wiki) and
+`tasks.md` for the phased roadmap.
 
-- **Backend headless**, TUI yalnizca istemci. Ayni REST API ileride web frontend'e de hizmet edecek.
-- **Lazy update**: kaynaklar tick-tick yazilmaz, view edildiginde son guncellemeden bu yana gecen sure icin uretim formulu calistirilir.
-- **Pure formuller**: tum oyun matematigi `backend/app/game/` altinda, DB-free, test edilebilir.
-- **Schema-first sabitler**: tum OGame sabitleri (`game/constants.py`) tek yerde.
+## Status
 
-Detay: `CLAUDE.md` (formul kaynaklari, single source of truth) ve `tasks.md` (faz planlamasi).
+- [x] Auth + universe + planet spawn
+- [x] Production + lazy resource update + energy throttling
+- [x] Build queue + scheduler
+- [x] Research tree
+- [x] Galaxy view
+- [x] Textual REPL TUI with slash commands + autocomplete
+- [x] Docker compose for the main backend
+- [x] Device-flow auth (CLI ↔ browser) + cookie-auth web dashboard
+- [x] Messaging (threads, conversations, unread counts)
+- [x] Planet activity logs
+- [x] Ships (12 types), defenses (8 types), fleet missions, simplified combat, espionage
+- [x] Web admin panel for tuning users/planets/universe
+- [x] CLI command history + prefix-match autosuggest
+- [ ] Full OGame rapid-fire combat chart (currently single-round simplified)
+- [ ] Recycler debris collection
+- [ ] Manual colonization (auto-spawn only)
+- [ ] Alliances + ACS
 
-## Faz durumu
+## Troubleshooting
 
-- [x] Faz 0 - Iskelet (uv, docker, alembic)
-- [x] Faz 1 - Auth + universe + ilk gezegen
-- [x] Faz 2 - Maden + enerji uretimi (lazy update)
-- [x] Faz 3 - Bina insaati (queue + scheduler)
-- [x] Faz 4 - Arastirma agaci
-- [x] Faz 5 - Galaksi gorunumu
-- [x] Faz 6 - TUI istemci
-- [ ] Faz 7+ post-MVP: filo, savas, espionage, ittifak, ay (tasks.md)
-
-## Sorun giderme
-
-**`ogame: command not found`** -> `~/.local/bin` PATH'de degil. `.bashrc/.zshrc`'ye ekle:
+**`sakusen: command not found`** → `~/.local/bin` not in `PATH`:
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-**TUI acilmiyor, "baglanamiyor"** -> `OGAME_BACKEND` set mi? `curl $OGAME_BACKEND/health` cevap veriyor mu? Operator'a sor: container hala healthy mi (`make server-ps`).
+**TUI says "can't reach backend"** → check `$SAKUSEN_BACKEND`:
+```bash
+echo $SAKUSEN_BACKEND
+curl $SAKUSEN_BACKEND/health
+```
 
-**`uv tool install` git auth hatasi** -> SSH key'in GitHub'a ekli mi? `ssh -T git@github.com` ile dogrula.
+**`uv tool install` git auth error** → check SSH:
+```bash
+ssh -T git@github.com
+```
 
-**Verileri sifirla (solo)** -> `rm -rf ~/.local/share/ogame/`.
-
-**Verileri sifirla (operator)** -> `docker compose down -v` (postgres volume silinir, butun veri gider, dikkat).
+**Reset solo data** → `rm -rf ~/.local/share/sakusen/`
+**Reset host data** → `docker compose down -v` (irreversible)

@@ -1,4 +1,4 @@
-"""Space Galactic dashboard screen (slash-command REPL)."""
+"""Sakusen dashboard screen (slash-command REPL)."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ COMMANDS: list[CommandSpec] = [
 ]
 
 
-HELP_TEXT = """[bold yellow]Space Galactic - commands[/bold yellow]
+HELP_TEXT = """[bold yellow]sakusen 策戦 · commands[/bold yellow]
 
 [bold]gameplay[/bold]
   /planets                list my planets
@@ -493,7 +493,7 @@ class ReplScreen(Screen):
         self._input = self.query_one("#prompt", Input)
         self._suggestions = self.query_one("#suggestions", OptionList)
 
-        self._log.write("[bold yellow]Space Galactic[/bold yellow]")
+        self._log.write("[bold yellow]sakusen 策戦[/bold yellow]")
         self._log.write("[dim]Type / to see commands, Tab to autocomplete, Enter to run.[/dim]")
         self._log.write("")
 

@@ -1,4 +1,6 @@
-"""~/.config/ogame/credentials.json yonetimi.
+"""~/.config/sakusen/credentials.json yonetimi.
+
+Eski ~/.config/ogame/credentials.json varsa otomatik migrate edilir.
 
 Format:
     {
@@ -13,9 +15,27 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 
-DEFAULT_PATH = Path.home() / ".config" / "ogame" / "credentials.json"
+DEFAULT_PATH = Path.home() / ".config" / "sakusen" / "credentials.json"
+LEGACY_PATH = Path.home() / ".config" / "ogame" / "credentials.json"
+
+
+def _migrate_legacy(path: Path = DEFAULT_PATH) -> None:
+    """One-time migration: if legacy path has data and the new path is empty,
+    copy the legacy file forward so users don't have to re-authenticate."""
+    if path.exists() or not LEGACY_PATH.exists():
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(LEGACY_PATH, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    except OSError:
+        pass
 
 
 def _normalize(url: str) -> str:
@@ -23,6 +43,7 @@ def _normalize(url: str) -> str:
 
 
 def load_all(path: Path = DEFAULT_PATH) -> dict[str, dict[str, str]]:
+    _migrate_legacy(path)
     if not path.exists():
         return {}
     try:

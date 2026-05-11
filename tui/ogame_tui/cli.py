@@ -1,4 +1,4 @@
-"""ogame CLI: solo + remote + server modes, signup URL + key prompt."""
+"""Sakusen CLI: solo + remote + server modes, signup URL + key prompt."""
 
 from __future__ import annotations
 
@@ -15,7 +15,13 @@ import httpx
 
 from ogame_tui import credentials as creds
 
-DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "ogame"
+DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "sakusen"
+LEGACY_DATA_DIR = Path.home() / ".local" / "share" / "ogame"
+
+
+def _backend_env() -> str | None:
+    """Read backend URL from SAKUSEN_BACKEND, falling back to legacy OGAME_BACKEND."""
+    return os.environ.get("SAKUSEN_BACKEND") or os.environ.get("OGAME_BACKEND")
 
 ANSI_RESET = "\033[0m"
 ANSI_BOLD = "\033[1m"
@@ -120,7 +126,7 @@ def _device_auth_flow(backend_url: str) -> str | None:
     url = f"{backend_url}/login?code={code}"
 
     print(file=sys.stderr)
-    print(_color("┌─ Space Galactic - sign in ", ANSI_BOLD) + _color("─" * 36, ANSI_DIM), file=sys.stderr)
+    print(_color("┌─ sakusen 策戦 · sign in ", ANSI_BOLD) + _color("─" * 39, ANSI_DIM), file=sys.stderr)
     print(_color("│", ANSI_DIM), file=sys.stderr)
     print(_color("│ ", ANSI_DIM) + "Open this URL in your browser:", file=sys.stderr)
     print(_color("│   ", ANSI_DIM) + _color(url, ANSI_CYAN), file=sys.stderr)
@@ -205,22 +211,23 @@ def _get_or_acquire_credentials(backend_url: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="ogame",
-        description="Space Galactic - OGame clone (TUI client)",
+        prog="sakusen",
+        description="Sakusen 策戦 — terminal-native multiplayer space strategy",
         epilog=(
-            "Default: connects to $OGAME_BACKEND if set, otherwise starts solo mode. "
-            'For multiplayer: export OGAME_BACKEND="http://operator-host:9931"'
+            "Default: connects to $SAKUSEN_BACKEND (or legacy $OGAME_BACKEND), "
+            "otherwise starts solo mode. "
+            'For multiplayer: export SAKUSEN_BACKEND="http://operator-host:9931"'
         ),
     )
     parser.add_argument(
         "--remote", "-r",
         default=None,
-        help="Backend URL (multiplayer). Overrides $OGAME_BACKEND.",
+        help="Backend URL (multiplayer). Overrides $SAKUSEN_BACKEND.",
     )
     parser.add_argument(
         "--solo",
         action="store_true",
-        help="Force solo mode (local SQLite). Ignores $OGAME_BACKEND.",
+        help="Force solo mode (local SQLite). Ignores $SAKUSEN_BACKEND.",
     )
     parser.add_argument(
         "--data-dir",
@@ -234,7 +241,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    remote = args.remote or (None if args.solo else os.environ.get("OGAME_BACKEND"))
+    remote = args.remote or (None if args.solo else _backend_env())
 
     if args.solo or not remote:
         data_dir = Path(args.data_dir).expanduser()
@@ -279,10 +286,10 @@ def main() -> None:
 
 
 def server_main() -> None:
-    """ogame-server console script: backend only (multiplayer host)."""
+    """sakusen-server console script: backend only (multiplayer host)."""
     parser = argparse.ArgumentParser(
-        prog="ogame-server",
-        description="Space Galactic backend (multiplayer host)",
+        prog="sakusen-server",
+        description="Sakusen 策戦 backend (multiplayer host)",
     )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)

@@ -1,7 +1,7 @@
 [project]
-name = "space-galactic"
+name = "sakusen"
 version = "0.1.0"
-description = "OGame klonu - TUI tabanli online (multiplayer) uzay stratejisi"
+description = "Sakusen (策戦) — terminal-native multiplayer space strategy"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
@@ -42,6 +42,9 @@ dev = [
 ]
 
 [project.scripts]
+sakusen = "ogame_tui.cli:main"
+sakusen-server = "ogame_tui.cli:server_main"
+# Legacy aliases (will be removed after the next public release):
 ogame = "ogame_tui.cli:main"
 ogame-server = "ogame_tui.cli:server_main"
 

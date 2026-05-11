@@ -357,10 +357,9 @@ _PAGE_CSS = """
 """
 
 
-_LOGO_BANNER = """┌─────────────────────────────┐
-│       S P A C E             │
-│       G A L A C T I C       │
-└─────────────────────────────┘"""
+_LOGO_BANNER = """┌─────────────────────────────────┐
+│   S A K U S E N    ·    策 戦   │
+└─────────────────────────────────┘"""
 
 
 def _shell(title: str, body: str, with_login_layout: bool = False) -> str:
@@ -465,7 +464,7 @@ def _device_banner_html(code: str | None) -> str:
     return (
         '<div class="info-banner">'
         '<strong>Terminal authentication</strong> &middot; '
-        'sign in (or create an account) to authorize your <code>ogame</code> CLI session. '
+        'sign in (or create an account) to authorize your <code>sakusen</code> CLI session. '
         'You can close this tab when you see the success page.'
         '</div>'
     )
@@ -498,7 +497,7 @@ async def login_page(
     body = f"""
 <div class="login-container">
   <pre class="logo">{_LOGO_BANNER}</pre>
-  <p class="tagline">terminal-based · ogame clone</p>
+  <p class="tagline">策戦 · terminal · strategy · in space</p>
 
   {_device_banner_html(code)}{_alert_html(err, ok)}
 
@@ -522,7 +521,7 @@ async def login_page(
   </p>
 </div>
 """
-    return HTMLResponse(_shell("Sign in &middot; Space Galactic", body, with_login_layout=True))
+    return HTMLResponse(_shell("Sign in &middot; sakusen", body, with_login_layout=True))
 
 
 @router.get("/signup", response_class=HTMLResponse)
@@ -542,7 +541,7 @@ async def signup_page(
     body = f"""
 <div class="login-container">
   <pre class="logo">{_LOGO_BANNER}</pre>
-  <p class="tagline">terminal-based · ogame clone</p>
+  <p class="tagline">策戦 · terminal · strategy · in space</p>
 
   {_device_banner_html(code)}{_alert_html(err, ok)}
 
@@ -571,7 +570,7 @@ async def signup_page(
   </p>
 </div>
 """
-    return HTMLResponse(_shell("Sign up &middot; Space Galactic", body, with_login_layout=True))
+    return HTMLResponse(_shell("Sign up &middot; sakusen", body, with_login_layout=True))
 
 
 @router.post("/signup")
@@ -669,7 +668,7 @@ async def _terminal_success_page(username: str) -> HTMLResponse:
 <div class="card">
   <h2 class="card-title">Success <small>welcome, {username}</small></h2>
   <div class="ok-banner">
-    Your <code>ogame</code> terminal session is now authenticated.
+    Your <code>sakusen</code> terminal session is now authenticated.
   </div>
   <p class="hint">
     Return to your terminal — the CLI is polling and will pick up your session in a couple of seconds.
@@ -678,7 +677,7 @@ async def _terminal_success_page(username: str) -> HTMLResponse:
 </div>
 </div>
 """
-    return HTMLResponse(_shell("Signed in &middot; Space Galactic", body, with_login_layout=True))
+    return HTMLResponse(_shell("Signed in &middot; sakusen", body, with_login_layout=True))
 
 
 # ============================================================================
@@ -728,7 +727,7 @@ async def me_page(
     body = f"""
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SPACE GALACTIC</span>
+    <span class="topbar-brand">SAKUSEN 策戦</span>
     <span class="topbar-user">account</span>
   </div>
   <div class="topbar-right">
@@ -772,7 +771,7 @@ async def me_page(
   </table>
 </div>
 """
-    return HTMLResponse(_shell("Account &middot; Space Galactic", body))
+    return HTMLResponse(_shell("Account &middot; sakusen", body))
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -795,7 +794,7 @@ async def dashboard(
         body = f"""
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SPACE GALACTIC</span>
+    <span class="topbar-brand">SAKUSEN 策戦</span>
     <span class="topbar-user">commander <b>{user.username}</b></span>
   </div>
   <div class="topbar-right">
@@ -807,7 +806,7 @@ async def dashboard(
   <p>You have no planets yet. Contact the operator.</p>
 </div>
 """
-        return HTMLResponse(_shell("Dashboard &middot; Space Galactic", body))
+        return HTMLResponse(_shell("Dashboard &middot; sakusen 策戦", body))
 
     # Select planet (default = first; honor ?planet_id=)
     selected = planets[0]
@@ -858,7 +857,7 @@ async def dashboard(
     unread_count = int(unread_res.scalar() or 0)
 
     return HTMLResponse(_shell(
-        "Dashboard &middot; Space Galactic",
+        "Dashboard &middot; sakusen 策戦",
         _render_dashboard(
             user=user,
             current_planet=planet,
@@ -906,7 +905,7 @@ def _render_topbar(user: User, unread: int) -> str:
 <meta http-equiv="refresh" content="10">
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SPACE GALACTIC</span>
+    <span class="topbar-brand">SAKUSEN 策戦</span>
     <span class="topbar-user">commander <b>{user.username}</b></span>
   </div>
   <div class="topbar-right">
