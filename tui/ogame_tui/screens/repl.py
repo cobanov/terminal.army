@@ -14,6 +14,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
+from textual.suggester import Suggester
 from textual.widgets import Input, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
@@ -289,6 +290,34 @@ def _now_local_hhmmss() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
+class HistorySuggester(Suggester):
+    """fish/zsh-style inline autosuggest from command history (prefix match).
+
+    Returns the most recent history entry whose slash-normalized form begins
+    with the user's input. The Input widget renders it as dim ghost text;
+    Right-arrow / End / Tab accepts the rest into the buffer.
+    """
+
+    def __init__(self, history_ref) -> None:
+        super().__init__(use_cache=False, case_sensitive=False)
+        self._history_ref = history_ref
+
+    async def get_suggestion(self, value: str) -> str | None:
+        if not value:
+            return None
+        user_norm = value.lstrip("/").lower()
+        if not user_norm:
+            return None
+        for h in reversed(self._history_ref()):
+            h_norm = h.lstrip("/").lower()
+            if h_norm == user_norm or not h_norm.startswith(user_norm):
+                continue
+            # Preserve user's leading-slash preference
+            base = h.lstrip("/")
+            return ("/" if value.startswith("/") else "") + base
+        return None
+
+
 def _short_dt(iso_str: str) -> str:
     """Short date for inbox: HH:MM or 'yesterday' / dd MMM."""
     try:
@@ -430,6 +459,10 @@ class ReplScreen(Screen):
         self._tech_levels_cache: dict[str, int] = {}
         self._max_lab_level: int = 0
         self._players_cache: list[str] = []  # usernames for autocomplete
+        # Command history (arrow-up/down + autosuggest source)
+        self._history: list[str] = []
+        self._history_pos: int = 0  # cursor; len == "no current entry"
+        self._history_stash: str = ""  # what user was typing when nav began
 
     # ------- Compose ---------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -446,8 +479,9 @@ class ReplScreen(Screen):
                 yield Static("[dim]loading...[/dim]", id="right-content")
         yield OptionList(id="suggestions", classes="-hidden")
         yield Input(
-            placeholder="type / for commands, Tab to autocomplete, /help, /q to quit",
+            placeholder="type / for commands, Tab to autocomplete, ↑ for history, /help, /q to quit",
             id="prompt",
+            suggester=HistorySuggester(lambda: self._history),
         )
 
     async def on_mount(self) -> None:
@@ -718,26 +752,74 @@ class ReplScreen(Screen):
         self._update_suggestions(completion)
 
     async def action_suggest_next(self) -> None:
-        if not self._suggestions_visible():
+        # Popup visible -> navigate suggestions
+        if self._suggestions_visible():
+            n = len(self._current_suggestions)
+            if n == 0:
+                return
+            cur = self._suggestions.highlighted
+            cur = 0 if cur is None else cur
+            self._suggestions.highlighted = (cur + 1) % n
+            self._scroll_highlighted_into_view()
             return
-        n = len(self._current_suggestions)
-        if n == 0:
-            return
-        cur = self._suggestions.highlighted
-        cur = 0 if cur is None else cur
-        self._suggestions.highlighted = (cur + 1) % n
-        self._scroll_highlighted_into_view()
+        # Popup hidden -> history forward
+        self._history_forward()
 
     async def action_suggest_prev(self) -> None:
-        if not self._suggestions_visible():
+        # Popup visible -> navigate suggestions
+        if self._suggestions_visible():
+            n = len(self._current_suggestions)
+            if n == 0:
+                return
+            cur = self._suggestions.highlighted
+            cur = 0 if cur is None else cur
+            self._suggestions.highlighted = (cur - 1) % n
+            self._scroll_highlighted_into_view()
             return
-        n = len(self._current_suggestions)
-        if n == 0:
+        # Popup hidden -> history back
+        self._history_back()
+
+    # ------- Command history -------------------------------------------------
+    def _history_back(self) -> None:
+        """↑ when popup hidden: cycle backward through history."""
+        if not self._history:
             return
-        cur = self._suggestions.highlighted
-        cur = 0 if cur is None else cur
-        self._suggestions.highlighted = (cur - 1) % n
-        self._scroll_highlighted_into_view()
+        if self._history_pos >= len(self._history):
+            # First time pressing up: stash current input so ↓↓ can return
+            self._history_stash = self._input.value
+            self._history_pos = len(self._history) - 1
+        elif self._history_pos > 0:
+            self._history_pos -= 1
+        self._input.value = self._history[self._history_pos]
+        self._input.cursor_position = len(self._input.value)
+
+    def _history_forward(self) -> None:
+        """↓ when popup hidden: cycle forward in history (or back to stash)."""
+        if not self._history:
+            return
+        if self._history_pos >= len(self._history):
+            return  # already past end
+        self._history_pos += 1
+        if self._history_pos >= len(self._history):
+            self._input.value = self._history_stash
+        else:
+            self._input.value = self._history[self._history_pos]
+        self._input.cursor_position = len(self._input.value)
+
+    def _push_history(self, cmd: str) -> None:
+        # Dedupe consecutive duplicates
+        if not cmd:
+            return
+        if self._history and self._history[-1] == cmd:
+            self._history_pos = len(self._history)
+            self._history_stash = ""
+            return
+        self._history.append(cmd)
+        # Bound history size
+        if len(self._history) > 500:
+            self._history = self._history[-500:]
+        self._history_pos = len(self._history)
+        self._history_stash = ""
 
     def action_hide_suggestions(self) -> None:
         self._suggestions.add_class("-hidden")
@@ -753,6 +835,7 @@ class ReplScreen(Screen):
         self._current_suggestions = []
         if not raw:
             return
+        self._push_history(raw)
         self._log.write(f"[bold yellow]>[/bold yellow] {raw}")
         try:
             await self._handle(raw)
