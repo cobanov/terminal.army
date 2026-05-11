@@ -11,6 +11,11 @@ server-down:
 server-restart:
 	docker compose restart backend
 
+# Recreate the backend container — needed after editing .env so the
+# new environment variables are picked up. `restart` keeps the old env.
+server-reload:
+	docker compose up -d backend
+
 server-build:
 	docker compose build backend
 
