@@ -68,7 +68,14 @@ async def refresh_planet_resources(
     now: datetime | None = None,
 ) -> tuple[Planet, ProductionReport]:
     now = now or datetime.now(UTC)
-    planet = await db.get(Planet, planet_id)
+    # SELECT ... FOR UPDATE prevents two concurrent requests on the same
+    # planet from both computing + applying the same delta_seconds. On
+    # SQLite (solo mode) this is a no-op; on Postgres it serializes the
+    # row update.
+    result = await db.execute(
+        select(Planet).where(Planet.id == planet_id).with_for_update()
+    )
+    planet = result.scalar_one_or_none()
     if planet is None:
         raise ValueError(f"planet {planet_id} not found")
 

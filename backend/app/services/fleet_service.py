@@ -116,6 +116,12 @@ async def send_fleet(
     await refresh_planet_resources(db, origin_planet_id)
     await db.refresh(planet)
 
+    # Lock ship rows so two concurrent send-fleet calls can't both pass the
+    # stock check and double-spend the same units.
+    await db.execute(
+        select(PlanetShip).where(PlanetShip.planet_id == origin_planet_id).with_for_update()
+    )
+
     # Verify ship stock
     stock = await _get_planet_ships(db, origin_planet_id)
     for st, c in ships.items():
