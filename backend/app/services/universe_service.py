@@ -33,8 +33,24 @@ async def ensure_default_universe(
     name: str = "Galactica",
     speed: int = 1,
 ) -> Universe:
+    """Get or create the default universe.
+
+    Existing universe's speed_* fields are synced to the current `speed`
+    setting on every startup. Lets the operator tune the universe speed
+    via DEFAULT_UNIVERSE_SPEED + restart, without DB editing.
+    """
     existing = await get_default_universe(db)
     if existing is not None:
+        if (
+            existing.speed_economy != speed
+            or existing.speed_fleet != speed
+            or existing.speed_research != speed
+        ):
+            existing.speed_economy = speed
+            existing.speed_fleet = speed
+            existing.speed_research = speed
+            await db.commit()
+            await db.refresh(existing)
         return existing
     universe = Universe(
         name=name,
