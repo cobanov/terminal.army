@@ -208,3 +208,12 @@ class OGameClient:
 
     async def get_report(self, report_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/reports/{report_id}")
+
+    # ----- Admin ----------------------------------------------------------
+    async def admin_get_universe(self) -> dict[str, Any]:
+        return await self._request("GET", "/admin/universe")
+
+    async def admin_set_speed(self, speed: int) -> dict[str, Any]:
+        return await self._request(
+            "POST", "/admin/universe/speed", json={"speed": speed}
+        )

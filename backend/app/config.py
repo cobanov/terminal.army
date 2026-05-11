@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = "*"
 
+    # Username of the operator who can change runtime universe settings
+    # (speed, etc.) via /admin/* endpoints. Empty = no one is admin.
+    admin_username: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

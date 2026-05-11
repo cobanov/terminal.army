@@ -82,6 +82,7 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/attack ",    "/attack <g>:<s>:<p>", "attack a target (see /help)"),
     CommandSpec("/transport ", "/transport <g>:<s>:<p>", "transport resources"),
     CommandSpec("/reports",    "/reports [id]",    "list reports or open one"),
+    CommandSpec("/speed",      "/speed [N]",       "show or set universe speed (admin)"),
     CommandSpec("/me",         "/me",              "show my account"),
     CommandSpec("/refresh",    "/refresh",         "force refresh"),
     CommandSpec("/clear",      "/clear",           "clear log"),
@@ -125,6 +126,10 @@ HELP_TEXT = """[bold yellow]Space Galactic - commands[/bold yellow]
   /send <mission> <g>:<s>:<p> <ship>:<n> ...   generic fleet send
   /reports                list espionage + combat reports
   /reports <id>           open one report in detail
+
+[bold]admin[/bold]
+  /speed                  show current universe speed multiplier
+  /speed <N>              set universe speed to N (1..100, instant)
 
 [bold]system[/bold]
   /me                     my account info
@@ -776,6 +781,7 @@ class ReplScreen(Screen):
             "atk": "attack",
             "trans": "transport", "tx": "transport",
             "rep": "reports",
+            "sp": "speed", "spd": "speed", "x": "speed",
         }
         cmd = aliases.get(cmd, cmd)
 
@@ -1120,6 +1126,39 @@ class ReplScreen(Screen):
             f"[green]cancelled[/green] {r['item_key']}  "
             f"refund {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}"
         )
+
+    async def _cmd_speed(self, args: list[str]) -> None:
+        """Show or set universe speed multiplier (admin only)."""
+        if not args:
+            try:
+                u = await self.app.client.admin_get_universe()
+            except APIError as exc:
+                self._log.write(f"[red]{exc.detail}[/red]")
+                return
+            self._log.write(
+                f"[bold yellow]{u['name']}[/bold yellow]  "
+                f"economy={u['speed_economy']}x  fleet={u['speed_fleet']}x  "
+                f"research={u['speed_research']}x"
+            )
+            self._log.write(
+                "[dim]change with[/dim] [yellow]/speed <N>[/yellow] [dim](admin only, 1..100)[/dim]"
+            )
+            return
+        try:
+            n = int(args[0])
+        except ValueError:
+            self._log.write("[red]speed must be integer (1..100)[/red]")
+            return
+        try:
+            u = await self.app.client.admin_set_speed(n)
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write(
+            f"[green]universe speed -> {u['speed_economy']}x[/green]  "
+            f"(economy/fleet/research) [dim]takes effect immediately[/dim]"
+        )
+        await self._refresh_dashboard()
 
     async def _cmd_refresh(self, args: list[str]) -> None:
         await self._refresh_planets()
