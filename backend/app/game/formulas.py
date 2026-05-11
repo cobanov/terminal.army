@@ -6,7 +6,7 @@ Bu modul DB ve framework bagimsizdir: input -> output, side effect yok.
 
 from __future__ import annotations
 
-from math import ceil, floor
+from math import floor
 
 from backend.app.game.constants import (
     BUILDING_COSTS,
@@ -94,12 +94,16 @@ def fusion_deut_consumption(level: int) -> int:
 
 
 def mine_energy_consumption(building_type: BuildingType, level: int) -> int:
+    """Source: https://ogame.fandom.com/wiki/Metal_Mine
+    Energy = floor(coeff * level * 1.1^level)
+    coeff = 10 (metal/crystal mine), 20 (deuterium synthesizer)
+    """
     if level <= 0:
         return 0
     coeff = MINE_ENERGY_COEFF.get(building_type)
     if coeff is None:
         return 0
-    return ceil(coeff * level * (1.1**level))
+    return floor(coeff * level * (1.1**level))
 
 
 # -------- Insaat / arastirma maliyeti --------------------------------------
