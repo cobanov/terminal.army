@@ -16,6 +16,7 @@ from backend.app.api.planet import router as planet_router
 from backend.app.api.research import router as research_router
 from backend.app.api.shipyard import router as shipyard_router
 from backend.app.api.social import router as social_router
+from backend.app.api.stats import router as stats_router
 from backend.app.api.universe import router as universe_router
 from backend.app.api.web import router as web_router
 from backend.app.config import get_settings
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(fleet_router)
     app.include_router(admin_router)
     app.include_router(admin_ui_router)
+    app.include_router(stats_router)
 
     return app
 

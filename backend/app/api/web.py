@@ -455,6 +455,74 @@ def _remaining_str(dt: datetime) -> str:
 
 
 # ============================================================================
+# Lobby helpers
+# ============================================================================
+def _parse_lobby_servers(spec: str) -> list[tuple[str, str]]:
+    """Parse 'Yamato=https://yamato.sakusen.space,Tengu=https://...' to a list."""
+    out: list[tuple[str, str]] = []
+    for entry in spec.split(","):
+        entry = entry.strip()
+        if not entry or "=" not in entry:
+            continue
+        name, url = entry.split("=", 1)
+        out.append((name.strip(), url.strip()))
+    return out
+
+
+async def _render_lobby_servers(servers: list[tuple[str, str]]) -> str:
+    """Render a card listing each known server with live /stats."""
+    import httpx as _httpx
+
+    rows: list[str] = []
+    async with _httpx.AsyncClient(timeout=2.0) as client:
+        for name, url in servers:
+            try:
+                r = await client.get(f"{url.rstrip('/')}/stats")
+                stats = r.json()
+                reg = stats.get("registered", 0)
+                cap = stats.get("max_users", 0)
+                desc = stats.get("description", "")
+                full = stats.get("full", False)
+                load_pct = (reg / cap * 100) if cap else 0
+                status_color = "#ef4444" if full else ("#84cc16" if load_pct < 70 else "#fbbf24")
+                status_text = "FULL" if full else f"{reg}/{cap}"
+                action = (
+                    '<span class="dim">closed</span>' if full
+                    else f'<a href="{url}" style="color:#fbbf24;">enter →</a>'
+                )
+                rows.append(f"""
+<tr>
+  <td><b>{name}</b><div class="dim" style="font-size:0.75rem;">{desc}</div></td>
+  <td><span style="color:{status_color};">{status_text}</span></td>
+  <td><code>{url}</code></td>
+  <td>{action}</td>
+</tr>""")
+            except Exception:
+                rows.append(f"""
+<tr>
+  <td><b>{name}</b></td>
+  <td class="muted">offline</td>
+  <td><code>{url}</code></td>
+  <td><span class="dim">unreachable</span></td>
+</tr>""")
+    return f"""
+<div class="card">
+  <h2 class="card-title">Servers <small>pick a universe</small></h2>
+  <table>
+    <thead>
+      <tr><th>name</th><th>population</th><th>url</th><th></th></tr>
+    </thead>
+    <tbody>{''.join(rows)}</tbody>
+  </table>
+  <p class="hint" style="margin-top:0.8rem;">
+    Each server is an independent universe with its own galaxy.
+    Use the URL as your <code>SAKUSEN_BACKEND</code>.
+  </p>
+</div>
+"""
+
+
+# ============================================================================
 # Routes: login / signup / signin / logout
 # ============================================================================
 @router.get("/", response_class=HTMLResponse)
@@ -471,16 +539,30 @@ async def root(
 
 @router.get("/install", response_class=HTMLResponse)
 async def install_page(request: Request) -> Response:
-    """Public landing page: install instructions + sign-in/up links."""
+    """Public landing page: install instructions + sign-in/up links.
+
+    If LOBBY_SERVERS is configured, render the lobby server list above the
+    install instructions; otherwise just the install page (single-server
+    deployment).
+    """
+    settings = get_settings()
     # Best-guess backend URL the visitor will use (this server's public URL)
     host = request.headers.get("host", "sakusen.space")
     proto = "https" if request.url.scheme == "https" else "http"
     backend_url = f"{proto}://{host}"
 
+    # Render server list block if this instance is a lobby
+    lobby_block = ""
+    if settings.lobby_servers.strip():
+        servers = _parse_lobby_servers(settings.lobby_servers)
+        lobby_block = await _render_lobby_servers(servers)
+
     body = f"""
 <div class="login-container">
   <pre class="logo">{_LOGO_BANNER}</pre>
-  <p class="tagline">策戦 · terminal · strategy · in space</p>
+  <p class="tagline">策戦 · command a galactic empire from your terminal</p>
+
+  {lobby_block}
 
   <div class="card">
     <h2 class="card-title">What is this <small>tldr</small></h2>
@@ -573,7 +655,7 @@ async def login_page(
     body = f"""
 <div class="login-container">
   <pre class="logo">{_LOGO_BANNER}</pre>
-  <p class="tagline">策戦 · terminal · strategy · in space</p>
+  <p class="tagline">策戦 · command a galactic empire from your terminal</p>
 
   {_device_banner_html(code)}{_alert_html(err, ok)}
 
@@ -620,7 +702,7 @@ async def signup_page(
     body = f"""
 <div class="login-container">
   <pre class="logo">{_LOGO_BANNER}</pre>
-  <p class="tagline">策戦 · terminal · strategy · in space</p>
+  <p class="tagline">策戦 · command a galactic empire from your terminal</p>
 
   {_device_banner_html(code)}{_alert_html(err, ok)}
 
@@ -664,6 +746,16 @@ async def signup_submit(
     password: Annotated[str, Form(min_length=6)],
     code: str | None = None,
 ) -> Response:
+    # Reject if server is at capacity
+    settings = get_settings()
+    total_res = await db.execute(select(func.count()).select_from(User))
+    total = int(total_res.scalar() or 0)
+    if total >= settings.server_max_users:
+        return RedirectResponse(
+            f"/signup?err=Server+is+full+({total}/{settings.server_max_users}).+Try+another+server.",
+            status_code=303,
+        )
+
     existing = await db.execute(
         select(User).where(or_(User.username == username, User.email == email))
     )
@@ -940,6 +1032,10 @@ async def dashboard(
     )
     unread_count = int(unread_res.scalar() or 0)
 
+    # Registered total (for topbar server tag)
+    reg_res = await db.execute(select(func.count()).select_from(User))
+    registered_count = int(reg_res.scalar() or 0)
+
     return HTMLResponse(_shell(
         "Dashboard &middot; sakusen 策戦",
         _render_dashboard(
@@ -951,6 +1047,7 @@ async def dashboard(
             active_queue=active_queue,
             logs=logs,
             unread_count=unread_count,
+            registered_count=registered_count,
         ),
     ))
 
@@ -967,16 +1064,17 @@ def _render_dashboard(
     active_queue: list[BuildQueue],
     logs: list[BuildQueue],
     unread_count: int,
+    registered_count: int = 0,
 ) -> str:
     return (
-        _render_topbar(user, unread_count)
+        _render_topbar(user, unread_count, registered_count)
         + _render_planet_tabs(all_planets, current_planet)
         + _render_planet_summary(current_planet, production)
         + _render_main_grid(current_planet, production, buildings, active_queue, logs)
     )
 
 
-def _render_topbar(user: User, unread: int) -> str:
+def _render_topbar(user: User, unread: int, registered_count: int = 0) -> str:
     msg = (
         f'<span class="ok">✉ {unread} new</span>'
         if unread > 0
@@ -985,15 +1083,24 @@ def _render_topbar(user: User, unread: int) -> str:
     settings = get_settings()
     is_admin = (settings.admin_username or "") == user.username
     admin_link = '<a href="/admin">admin</a>' if is_admin else ""
+    lobby_link = (
+        f'<a href="{settings.lobby_url}" style="margin-right:1rem;">← lobby</a>'
+        if settings.lobby_url else ""
+    )
+    server_tag = (
+        f'<span style="color:#525252; font-size:0.8rem; margin-left:0.6rem;">'
+        f'{settings.server_name} · {registered_count}/{settings.server_max_users}'
+        f'</span>'
+    )
     return f"""
 <meta http-equiv="refresh" content="10">
 <div class="topbar">
   <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN 策戦</span>
+    <span class="topbar-brand">SAKUSEN 策戦</span>{server_tag}
     <span class="topbar-user">commander <b>{user.username}</b></span>
   </div>
   <div class="topbar-right">
-    {msg}
+    {lobby_link}{msg}
     <a href="/dashboard">refresh</a>
     <a href="/me">account</a>
     {admin_link}

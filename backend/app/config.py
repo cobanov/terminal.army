@@ -23,6 +23,20 @@ class Settings(BaseSettings):
     # (speed, etc.) via /admin/* endpoints. Empty = no one is admin.
     admin_username: str = ""
 
+    # --- Server sharding -----------------------------------------------------
+    # Each backend instance represents one server (= one universe / shard).
+    # The lobby (sakusen.space) lists all known servers from LOBBY_SERVERS.
+    server_name: str = "Yamato"
+    server_description: str = "the first universe"
+    server_max_users: int = 5000
+    # Comma-separated list of sibling backend URLs (with names), used only by
+    # the lobby instance. Format: "name=https://url[,name2=https://url2]".
+    # Example: "Yamato=https://yamato.sakusen.space,Tengu=https://tengu.sakusen.space"
+    lobby_servers: str = ""
+    # If set, the dashboard topbar shows a "← back to lobby" link pointing
+    # here. Empty = this instance acts as its own lobby.
+    lobby_url: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
