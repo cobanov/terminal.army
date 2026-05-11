@@ -1,0 +1,57 @@
+# Space Galactic - ana backend + postgres
+#
+# Calistir:
+#   docker compose up -d
+#
+# Loglar:
+#   docker compose logs -f backend
+#
+# Health:
+#   curl http://localhost:9931/health
+#
+# Ortam degiskenleri (.env veya shell'den):
+#   JWT_SECRET           - prod'da rastgele uretip sabit tut
+#   DEFAULT_UNIVERSE_NAME, DEFAULT_UNIVERSE_SPEED - opsiyonel
+#   HOST_PORT            - dis erisim portu (default 9931)
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ogame-postgres
+    environment:
+      POSTGRES_USER: ogame
+      POSTGRES_PASSWORD: ogame
+      POSTGRES_DB: ogame
+    volumes:
+      - ogame-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ogame -d ogame"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: space-galactic-backend:latest
+    container_name: ogame-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ogame:ogame@postgres:5432/ogame
+      JWT_SECRET: ${JWT_SECRET:-change-me-prod-please-generate-something-random}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
+      DEFAULT_UNIVERSE_NAME: ${DEFAULT_UNIVERSE_NAME:-Galactica}
+      DEFAULT_UNIVERSE_SPEED: ${DEFAULT_UNIVERSE_SPEED:-1}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-5}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    ports:
+      - "${HOST_PORT:-9931}:8000"
+    restart: unless-stopped
+
+volumes:
+  ogame-pgdata:
