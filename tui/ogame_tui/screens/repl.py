@@ -97,7 +97,6 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/attack ",    "/attack <g>:<s>:<p>", "attack a target (see /help)"),
     CommandSpec("/transport ", "/transport <g>:<s>:<p>", "transport resources"),
     CommandSpec("/reports",    "/reports [id]",    "list reports or open one"),
-    CommandSpec("/speed",      "/speed [N]",       "show or set universe speed (admin)"),
     CommandSpec("/me",         "/me",              "show my account"),
     CommandSpec("/refresh",    "/refresh",         "force refresh"),
     CommandSpec("/clear",      "/clear",           "clear log"),
@@ -141,10 +140,6 @@ HELP_TEXT = """[bold yellow]sakusen 策戦 · commands[/bold yellow]
   /send <mission> <g>:<s>:<p> <ship>:<n> ...   generic fleet send
   /reports                list espionage + combat reports
   /reports <id>           open one report in detail
-
-[bold]admin[/bold]
-  /speed                  show current universe speed multiplier
-  /speed <N>              set universe speed to N (1..100, instant)
 
 [bold]system[/bold]
   /me                     my account info
@@ -333,15 +328,33 @@ def _short_dt(iso_str: str) -> str:
 
 
 def _nav_text() -> Text:
+    """Categorized nav: PLANET / RESEARCH / FLEET / GALAXY / SOCIAL / HELP."""
+    sections: list[tuple[str, list[str]]] = [
+        ("PLANET", ["/planet", "/buildings", "/upgrade", "/queue", "/cancel"]),
+        ("RESEARCH", ["/research", "/tree"]),
+        ("FLEET", ["/ships", "/build", "/fleets", "/espionage", "/attack", "/transport", "/reports"]),
+        ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
+        ("SOCIAL", ["/msg", "/inbox", "/players"]),
+        ("HELP", ["/help"]),
+    ]
     t = Text()
-    t.append("NAV\n", style="bold yellow")
-    for spec in COMMANDS:
-        if spec.completion in ("/clear", "/refresh", "/me", "/logout"):
-            continue
-        t.append(f"  {spec.label}\n", style="cyan")
+    for i, (title, cmds) in enumerate(sections):
+        if i > 0:
+            t.append("\n")
+        t.append(f"{title}\n", style="bold yellow")
+        for cmd in cmds:
+            # match the matching CommandSpec for the display label
+            spec = next(
+                (s for s in COMMANDS if s.completion.rstrip().rstrip("/").startswith(cmd) or
+                 s.completion.strip() == cmd or
+                 s.completion.strip() == cmd + " "), None,
+            )
+            label = spec.label if spec else cmd
+            t.append(f"  {label}\n", style="cyan")
     t.append("\n")
     t.append("HOTKEYS\n", style="bold yellow")
-    t.append("  Tab    autocomplete\n", style="dim")
+    t.append("  Tab    complete\n", style="dim")
+    t.append("  ↑ ↓    history\n", style="dim")
     t.append("  Esc    hide popup\n", style="dim")
     t.append("  Ctrl+L clear log\n", style="dim")
     t.append("  Ctrl+C quit\n", style="dim")
@@ -663,6 +676,13 @@ class ReplScreen(Screen):
         body.append(f"prod {en['produced']} / used {en['consumed']}   ")
         body.append(f"bal {en['balance']:+d}", style=bal_style)
         body.append(f"  ({en['production_factor']:.2f}x)", style="dim")
+        if en["production_factor"] < 1.0:
+            body.append("\n  ", style="")
+            body.append("⚠ ", style="bold red")
+            body.append("energy deficit", style="bold red")
+            body.append(" — mines throttled to ", style="red")
+            body.append(f"{en['production_factor']*100:.0f}%", style="bold red")
+            body.append("; build a solar plant", style="red")
         self._planet_card.update(body)
 
     def _render_right_panel(self) -> None:
@@ -878,7 +898,6 @@ class ReplScreen(Screen):
             "atk": "attack",
             "trans": "transport", "tx": "transport",
             "rep": "reports",
-            "sp": "speed", "spd": "speed", "x": "speed",
         }
         cmd = aliases.get(cmd, cmd)
 
@@ -1197,7 +1216,7 @@ class ReplScreen(Screen):
             self._log.write("[dim]queue empty[/dim]")
             return
         t = Table(show_header=True, header_style="bold yellow", box=None)
-        t.add_column("id", style="cyan")
+        t.add_column("id", style="bold yellow")
         t.add_column("type")
         t.add_column("item")
         t.add_column("->lvl", justify="right")
@@ -1213,6 +1232,10 @@ class ReplScreen(Screen):
                 _remaining_str(q["finished_at"]),
             )
         self._log.write(t)
+        self._log.write(
+            "[dim]cancel one with[/dim] [yellow]/cancel <id>[/yellow] "
+            "[dim](refunds full cost)[/dim]"
+        )
 
     async def _cmd_cancel(self, args: list[str]) -> None:
         if not args:
@@ -1228,39 +1251,6 @@ class ReplScreen(Screen):
             f"[green]cancelled[/green] {r['item_key']}  "
             f"refund {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}"
         )
-
-    async def _cmd_speed(self, args: list[str]) -> None:
-        """Show or set universe speed multiplier (admin only)."""
-        if not args:
-            try:
-                u = await self.app.client.admin_get_universe()
-            except APIError as exc:
-                self._log.write(f"[red]{exc.detail}[/red]")
-                return
-            self._log.write(
-                f"[bold yellow]{u['name']}[/bold yellow]  "
-                f"economy={u['speed_economy']}x  fleet={u['speed_fleet']}x  "
-                f"research={u['speed_research']}x"
-            )
-            self._log.write(
-                "[dim]change with[/dim] [yellow]/speed <N>[/yellow] [dim](admin only, 1..100)[/dim]"
-            )
-            return
-        try:
-            n = int(args[0])
-        except ValueError:
-            self._log.write("[red]speed must be integer (1..100)[/red]")
-            return
-        try:
-            u = await self.app.client.admin_set_speed(n)
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write(
-            f"[green]universe speed -> {u['speed_economy']}x[/green]  "
-            f"(economy/fleet/research) [dim]takes effect immediately[/dim]"
-        )
-        await self._refresh_dashboard()
 
     async def _cmd_refresh(self, args: list[str]) -> None:
         await self._refresh_planets()
