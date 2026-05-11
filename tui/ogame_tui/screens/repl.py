@@ -162,6 +162,12 @@ def suggestions_for(
     if not text:
         return []
 
+    # Slash-less input still triggers autocomplete: "queue" -> "/queue".
+    # The runtime command dispatcher already strips the leading slash, so
+    # both forms are equivalent at execution time.
+    if not text.startswith("/"):
+        text = "/" + text
+
     if " " in text:
         cmd, _, arg = text.partition(" ")
         cmd_l = cmd.lower()
