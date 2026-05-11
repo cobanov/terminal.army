@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.admin import router as admin_router
+from backend.app.api.admin_ui import router as admin_ui_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.building import router as building_router
 from backend.app.api.device import router as device_router
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(shipyard_router)
     app.include_router(fleet_router)
     app.include_router(admin_router)
+    app.include_router(admin_ui_router)
 
     return app
 
