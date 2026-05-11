@@ -1,5 +1,6 @@
 """ORM model imports for Alembic autogenerate and Base.metadata.create_all."""
 
+from backend.app.models.alliance import Alliance, AllianceMember, AllianceRole
 from backend.app.models.building import Building
 from backend.app.models.device_session import DeviceSession
 from backend.app.models.fleet import Fleet, FleetMission, FleetShip, FleetStatus
@@ -15,10 +16,13 @@ from backend.app.models.user import User
 all_models = (
     User, Universe, Planet, Building, Research, BuildQueue,
     Message, DeviceSession, PlanetShip, PlanetDefense,
-    Fleet, FleetShip, Report,
+    Fleet, FleetShip, Report, Alliance, AllianceMember,
 )
 
 __all__ = [
+    "Alliance",
+    "AllianceMember",
+    "AllianceRole",
     "Building",
     "BuildQueue",
     "DeviceSession",

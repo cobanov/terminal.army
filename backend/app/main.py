@@ -4,14 +4,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.admin import router as admin_router
 from backend.app.api.admin_ui import router as admin_ui_router
+from backend.app.api.alliance import router as alliance_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.building import router as building_router
 from backend.app.api.device import router as device_router
 from backend.app.api.fleet import router as fleet_router
 from backend.app.api.galaxy import router as galaxy_router
+from backend.app.api.leaderboard import router as leaderboard_router
 from backend.app.api.planet import router as planet_router
 from backend.app.api.research import router as research_router
 from backend.app.api.shipyard import router as shipyard_router
@@ -19,6 +22,7 @@ from backend.app.api.social import router as social_router
 from backend.app.api.stats import router as stats_router
 from backend.app.api.universe import router as universe_router
 from backend.app.api.web import router as web_router
+from backend.app.web_templates import STATIC_DIR
 from backend.app.config import get_settings
 from backend.app.db import AsyncSessionLocal, init_db
 from backend.app.scheduler import start_scheduler, stop_scheduler
@@ -82,6 +86,11 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(admin_ui_router)
     app.include_router(stats_router)
+    app.include_router(alliance_router, prefix="/api")
+    app.include_router(leaderboard_router, prefix="/api")
+
+    # Static files (CSS, etc.)
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     return app
 
