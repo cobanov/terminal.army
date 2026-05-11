@@ -384,12 +384,18 @@ async def _user_from_cookie(token: str | None, db: AsyncSession) -> User | None:
 
 def _set_auth_cookie(resp: Response, token: str) -> None:
     settings = get_settings()
+    # Bump to at least 30 days even if JWT_EXPIRE_MINUTES is shorter, so
+    # the browser keeps the cookie even when JWT is still valid via its
+    # own exp claim. Hard cap at JWT expiry.
+    max_age_sec = max(30 * 24 * 3600, settings.jwt_expire_minutes * 60)
     resp.set_cookie(
         key=COOKIE_NAME,
         value=token,
-        max_age=settings.jwt_expire_minutes * 60,
+        max_age=max_age_sec,
+        expires=max_age_sec,           # legacy header for older browsers
         httponly=True,
         samesite="lax",
+        secure=False,                  # explicit: works over plain HTTP
         path="/",
     )
 
@@ -635,6 +641,97 @@ async def _terminal_success_page(username: str) -> HTMLResponse:
 # ============================================================================
 # Dashboard
 # ============================================================================
+@router.get("/me", response_class=HTMLResponse)
+async def me_page(
+    db: DBSession,
+    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    """Account info page (works while signed in)."""
+    user = await _user_from_cookie(ogame_token, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=302)
+
+    planet_res = await db.execute(
+        select(Planet).where(Planet.owner_user_id == user.id).order_by(Planet.id)
+    )
+    planets = list(planet_res.scalars().all())
+
+    settings = get_settings()
+    is_admin = (settings.admin_username or "") == user.username
+
+    planets_rows = ""
+    if planets:
+        for p in planets:
+            planets_rows += (
+                f'<tr>'
+                f'<td>#{p.id}</td>'
+                f'<td><b>{p.name}</b></td>'
+                f'<td class="dim">{p.galaxy}:{p.system}:{p.position}</td>'
+                f'<td class="right">{p.fields_used}/{p.fields_total}</td>'
+                f'<td class="right metric-value metal">{_fmt_int(p.resources_metal)}</td>'
+                f'<td class="right metric-value crystal">{_fmt_int(p.resources_crystal)}</td>'
+                f'<td class="right metric-value deut">{_fmt_int(p.resources_deuterium)}</td>'
+                f'<td><a href="/dashboard?planet_id={p.id}">open</a></td>'
+                f'</tr>'
+            )
+    else:
+        planets_rows = '<tr><td colspan="8" class="empty-state">no planets</td></tr>'
+
+    admin_link = (
+        '<a href="/admin" style="margin-left:1rem;">admin panel</a>'
+        if is_admin else ""
+    )
+
+    body = f"""
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SPACE GALACTIC</span>
+    <span class="topbar-user">account</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/dashboard">dashboard</a>{admin_link}
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Profile <small>commander</small></h2>
+  <div class="grid-3">
+    <div>
+      <div class="metric-label">Username</div>
+      <div class="metric-value"><b>{user.username}</b></div>
+    </div>
+    <div>
+      <div class="metric-label">Email</div>
+      <div class="metric-value">{user.email}</div>
+    </div>
+    <div>
+      <div class="metric-label">Joined</div>
+      <div class="metric-value">{user.created_at.strftime("%Y-%m-%d") if user.created_at else "?"}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Planets <small>{len(planets)} owned</small></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>id</th><th>name</th><th>coord</th>
+        <th class="right">fields</th>
+        <th class="right">metal</th>
+        <th class="right">crystal</th>
+        <th class="right">deut</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>{planets_rows}</tbody>
+  </table>
+</div>
+"""
+    return HTMLResponse(_shell("Account &middot; Space Galactic", body))
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
     db: DBSession,
@@ -759,6 +856,9 @@ def _render_topbar(user: User, unread: int) -> str:
         if unread > 0
         else '<span style="color:#525252">✉ inbox</span>'
     )
+    settings = get_settings()
+    is_admin = (settings.admin_username or "") == user.username
+    admin_link = '<a href="/admin">admin</a>' if is_admin else ""
     return f"""
 <meta http-equiv="refresh" content="10">
 <div class="topbar">
@@ -769,6 +869,8 @@ def _render_topbar(user: User, unread: int) -> str:
   <div class="topbar-right">
     {msg}
     <a href="/dashboard">refresh</a>
+    <a href="/me">account</a>
+    {admin_link}
     <a href="/logout">logout</a>
   </div>
 </div>
