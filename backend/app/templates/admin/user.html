@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ target.username }} · Admin{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
+    <span class="topbar-user">editing <b>{{ target.username }}</b></span>
+  </div>
+  <div class="topbar-right">
+    <a href="/admin">&larr; admin</a>
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">User <small>#{{ target.id }} · {{ target.email }}</small></h2>
+  <p class="hint">
+    universe={{ target.current_universe_id }} ·
+    joined {{ target.created_at.strftime("%Y-%m-%d") if target.created_at else "?" }}
+  </p>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Technologies <small>set level (0..100)</small></h2>
+  <form action="/admin/user/{{ target.id }}/researches" method="post">
+    <div>
+      {% for tech in tech_fields %}
+      <label class="field" style="display:inline-block; width: 19%; margin-right: 0.5%;">
+        <span class="field-label">{{ tech.label }}</span>
+        <input type="number" name="tech_{{ tech.key }}" value="{{ tech.level }}" min="0" max="100">
+      </label>
+      {% endfor %}
+    </div>
+    <button type="submit" style="width: auto; padding: 0.65rem 1.5rem; margin-top: 1rem;">
+      Apply tech levels
+    </button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Planets <small>{{ planets|length }} owned</small></h2>
+  <table>
+    <thead>
+      <tr><th>id</th><th>name</th><th>coord</th><th class="right">fields</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% if planets %}
+        {% for p in planets %}
+        <tr>
+          <td>#{{ p.id }}</td>
+          <td><b>{{ p.name }}</b></td>
+          <td class="dim">{{ p.galaxy }}:{{ p.system }}:{{ p.position }}</td>
+          <td class="right">{{ p.fields_used }}/{{ p.fields_total }}</td>
+          <td><a href="/admin/user/{{ target.id }}/planet/{{ p.id }}">edit</a></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="5" class="empty-state">no planets</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <form action="/admin/user/{{ target.id }}/planet/new" method="post"
+        style="margin-top: 1rem; display:flex; gap:0.5rem; align-items:end;">
+    <label class="field" style="margin:0; width:80px;">
+      <span class="field-label">galaxy</span>
+      <input type="number" name="galaxy" min="1" max="9" required value="1">
+    </label>
+    <label class="field" style="margin:0; width:80px;">
+      <span class="field-label">system</span>
+      <input type="number" name="system" min="1" max="499" required value="100">
+    </label>
+    <label class="field" style="margin:0; width:80px;">
+      <span class="field-label">position</span>
+      <input type="number" name="position" min="1" max="15" required value="5">
+    </label>
+    <label class="field" style="margin:0; flex:1;">
+      <span class="field-label">name</span>
+      <input type="text" name="name" maxlength="32" value="Colony">
+    </label>
+    <button type="submit" style="width:auto; padding:0.65rem 1.2rem;">+ create planet</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,28 +1,30 @@
 """Admin web panel (cookie-based, admin_username only).
 
 Routes:
-    GET  /admin                                    -> dashboard (users + universe)
+    GET  /admin                                    -> dashboard
     GET  /admin/user/{user_id}                     -> user edit page
     POST /admin/user/{user_id}/researches          -> save tech levels
-    POST /admin/user/{user_id}/planet/new          -> create planet for user
+    POST /admin/user/{user_id}/planet/new          -> create planet
     GET  /admin/user/{user_id}/planet/{planet_id}  -> planet edit page
-    POST /admin/user/{user_id}/planet/{planet_id}  -> save resources/buildings/ships/defenses
-    POST /admin/universe/speed-form                -> set universe speed (HTML form)
+    POST /admin/user/{user_id}/planet/{planet_id}  -> save planet
+    POST /admin/user/{user_id}/planet/{planet_id}/delete
+    POST /admin/universe/speed-form                -> set universe speed
 
-All POSTs use PRG (form -> 303 redirect -> GET).
+All HTML is rendered from backend/app/templates/admin/.
 """
 
 from __future__ import annotations
 
 import random
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Form, Request, Response, status
+from fastapi import APIRouter, Cookie, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.api.web import COOKIE_NAME, _shell, _user_from_cookie
+from backend.app.api.web import COOKIE_NAME, _user_from_cookie
 from backend.app.config import get_settings
 from backend.app.deps import DBSession
 from backend.app.game.colonization import generate_planet_attributes
@@ -40,15 +42,14 @@ from backend.app.models.building import Building
 from backend.app.models.planet import Planet
 from backend.app.models.research import Research
 from backend.app.models.ship import PlanetDefense, PlanetShip
-from backend.app.models.universe import Universe
 from backend.app.models.user import User
 from backend.app.services.universe_service import get_default_universe
+from backend.app.web_templates import templates
 
 router = APIRouter(tags=["admin-ui"])
 
 
 async def _require_admin_or_redirect(token: str | None, db: AsyncSession):
-    """Returns the admin User or a Response if not admin (redirect)."""
     settings = get_settings()
     admin = (settings.admin_username or "").strip()
     if not admin:
@@ -62,14 +63,16 @@ async def _require_admin_or_redirect(token: str | None, db: AsyncSession):
 
 
 def _forbidden(your_user: str, admin: str) -> HTMLResponse:
-    body = f"""
-<div class="card" style="max-width: 480px; margin: 4rem auto;">
-  <h2 class="card-title">Access denied</h2>
-  <p>You are signed in as <b>{your_user}</b>. Only <b>{admin}</b> is the configured operator.</p>
-  <p><a href="/dashboard">back to dashboard</a></p>
-</div>
-"""
-    return HTMLResponse(_shell("Forbidden &middot; sakusen 策戦", body), status_code=403)
+    # Render the forbidden template inline (no request object needed since
+    # we're not setting any cookies here).
+    from fastapi import Request as _Req
+    # Minimal request-like dict for template
+    return HTMLResponse(
+        templates.get_template("admin/forbidden.html").render(
+            request=None, your_user=your_user, admin=admin,
+        ),
+        status_code=403,
+    )
 
 
 # ============================================================================
@@ -77,6 +80,7 @@ def _forbidden(your_user: str, admin: str) -> HTMLResponse:
 # ============================================================================
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_dashboard(
+    request: Request,
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
@@ -87,69 +91,27 @@ async def admin_dashboard(
 
     users_res = await db.execute(select(User).order_by(User.id))
     users = list(users_res.scalars().all())
+    user_rows = []
+    for u in users:
+        planet_res = await db.execute(
+            select(func.count()).select_from(Planet)
+            .where(Planet.owner_user_id == u.id)
+        )
+        planet_count = int(planet_res.scalar() or 0)
+        user_rows.append({
+            "id": u.id, "username": u.username, "email": u.email,
+            "planet_count": planet_count,
+        })
 
     universe = await get_default_universe(db)
 
-    # Build users table
-    rows = []
-    for u in users:
-        planets_res = await db.execute(
-            select(Planet).where(Planet.owner_user_id == u.id)
-        )
-        planet_count = len(list(planets_res.scalars().all()))
-        rows.append(f"""
-<tr>
-  <td>#{u.id}</td>
-  <td><b>{u.username}</b>{' <span class="ok">(you)</span>' if u.id == admin_user.id else ''}</td>
-  <td class="dim">{u.email}</td>
-  <td class="right">{planet_count}</td>
-  <td><a href="/admin/user/{u.id}">edit</a></td>
-</tr>""")
-
-    universe_card = f"""
-<div class="card">
-  <h2 class="card-title">Universe <small>id #{universe.id if universe else '?'}</small></h2>
-  <form action="/admin/universe/speed-form" method="post" style="display:flex; gap:1rem; align-items:end;">
-    <label class="field" style="flex:1;">
-      <span class="field-label">Speed multiplier (economy / fleet / research)</span>
-      <input type="number" name="speed" value="{universe.speed_economy if universe else 1}" min="1" max="100" required>
-    </label>
-    <button type="submit" style="flex:0 0 auto; width: auto; padding: 0.65rem 1.5rem;">Apply</button>
-  </form>
-  <p class="hint">
-    Current: economy={universe.speed_economy if universe else '?'}x,
-    fleet={universe.speed_fleet if universe else '?'}x,
-    research={universe.speed_research if universe else '?'}x.
-    Effect is immediate.
-  </p>
-</div>"""
-
-    body = f"""
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
-    <span class="topbar-user">commander <b>{admin_user.username}</b></span>
-  </div>
-  <div class="topbar-right">
-    <a href="/dashboard">dashboard</a>
-    <a href="/me" style="margin-left:1rem;">account</a>
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
-
-{universe_card}
-
-<div class="card">
-  <h2 class="card-title">Users <small>{len(users)} total</small></h2>
-  <table>
-    <thead>
-      <tr><th>id</th><th>username</th><th>email</th><th class="right">planets</th><th></th></tr>
-    </thead>
-    <tbody>{''.join(rows)}</tbody>
-  </table>
-</div>
-"""
-    return HTMLResponse(_shell("Admin &middot; sakusen 策戦", body))
+    return templates.TemplateResponse(name="admin/index.html", request=request, context={
+            "request": request,
+            "admin_user": admin_user,
+            "users": user_rows,
+            "universe": universe,
+        },
+    )
 
 
 @router.post("/admin/universe/speed-form")
@@ -176,6 +138,7 @@ async def admin_set_speed_form(
 @router.get("/admin/user/{user_id}", response_class=HTMLResponse)
 async def admin_user_edit(
     user_id: int,
+    request: Request,
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
@@ -187,89 +150,25 @@ async def admin_user_edit(
     if target is None:
         return HTMLResponse("user not found", status_code=404)
 
-    # Tech levels
     tech_res = await db.execute(select(Research).where(Research.user_id == user_id))
     techs = {r.tech_type: r.level for r in tech_res.scalars().all()}
+    tech_fields = [
+        {"key": tt.value, "label": TECH_LABELS[tt], "level": techs.get(tt.value, 0)}
+        for tt in TechType
+    ]
 
-    tech_fields = []
-    for tt in TechType:
-        tech_fields.append(f"""
-<label class="field" style="display:inline-block; width: 19%; margin-right: 0.5%;">
-  <span class="field-label">{TECH_LABELS[tt]}</span>
-  <input type="number" name="tech_{tt.value}" value="{techs.get(tt.value, 0)}" min="0" max="100">
-</label>""")
-
-    # Planets
     planet_res = await db.execute(
         select(Planet).where(Planet.owner_user_id == user_id).order_by(Planet.id)
     )
     planets = list(planet_res.scalars().all())
-    planet_rows = []
-    for p in planets:
-        planet_rows.append(f"""
-<tr>
-  <td>#{p.id}</td>
-  <td><b>{p.name}</b></td>
-  <td class="dim">{p.galaxy}:{p.system}:{p.position}</td>
-  <td class="right">{p.fields_used}/{p.fields_total}</td>
-  <td><a href="/admin/user/{user_id}/planet/{p.id}">edit</a></td>
-</tr>""")
 
-    body = f"""
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
-    <span class="topbar-user">editing <b>{target.username}</b></span>
-  </div>
-  <div class="topbar-right">
-    <a href="/admin">&larr; admin</a>
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
-
-<div class="card">
-  <h2 class="card-title">User <small>#{target.id} &middot; {target.email}</small></h2>
-  <p class="hint">universe={target.current_universe_id} &middot; joined {target.created_at.strftime("%Y-%m-%d") if target.created_at else "?"}</p>
-</div>
-
-<div class="card">
-  <h2 class="card-title">Technologies <small>set level (0..100)</small></h2>
-  <form action="/admin/user/{user_id}/researches" method="post">
-    <div>{''.join(tech_fields)}</div>
-    <button type="submit" style="width: auto; padding: 0.65rem 1.5rem; margin-top: 1rem;">Apply tech levels</button>
-  </form>
-</div>
-
-<div class="card">
-  <h2 class="card-title">Planets <small>{len(planets)} owned</small></h2>
-  <table>
-    <thead>
-      <tr><th>id</th><th>name</th><th>coord</th><th class="right">fields</th><th></th></tr>
-    </thead>
-    <tbody>{''.join(planet_rows) if planet_rows else '<tr><td colspan="5" class="empty-state">no planets</td></tr>'}</tbody>
-  </table>
-  <form action="/admin/user/{user_id}/planet/new" method="post" style="margin-top: 1rem; display:flex; gap:0.5rem; align-items:end;">
-    <label class="field" style="margin:0; width: 80px;">
-      <span class="field-label">galaxy</span>
-      <input type="number" name="galaxy" min="1" max="9" required value="1">
-    </label>
-    <label class="field" style="margin:0; width: 80px;">
-      <span class="field-label">system</span>
-      <input type="number" name="system" min="1" max="499" required value="100">
-    </label>
-    <label class="field" style="margin:0; width: 80px;">
-      <span class="field-label">position</span>
-      <input type="number" name="position" min="1" max="15" required value="5">
-    </label>
-    <label class="field" style="margin:0; flex:1;">
-      <span class="field-label">name</span>
-      <input type="text" name="name" maxlength="32" value="Colony">
-    </label>
-    <button type="submit" style="width: auto; padding: 0.65rem 1.2rem;">+ create planet</button>
-  </form>
-</div>
-"""
-    return HTMLResponse(_shell(f"Edit {target.username} &middot; Admin", body))
+    return templates.TemplateResponse(name="admin/user.html", request=request, context={
+            "request": request,
+            "target": target,
+            "tech_fields": tech_fields,
+            "planets": planets,
+        },
+    )
 
 
 @router.post("/admin/user/{user_id}/researches")
@@ -324,7 +223,6 @@ async def admin_create_planet(
     if target is None:
         return HTMLResponse("user not found", status_code=404)
 
-    # Ensure the slot is free
     existing = await db.execute(
         select(Planet).where(
             Planet.universe_id == target.current_universe_id,
@@ -337,28 +235,17 @@ async def admin_create_planet(
         return RedirectResponse(f"/admin/user/{user_id}?err=slot+taken", status_code=303)
 
     attrs = generate_planet_attributes(position, random.Random())
-    from datetime import UTC, datetime as _dt
-
     planet = Planet(
         owner_user_id=user_id,
         universe_id=target.current_universe_id,
-        galaxy=galaxy,
-        system=system,
-        position=position,
-        name=name,
-        fields_used=0,
-        fields_total=attrs.fields_total,
-        temp_min=attrs.temp_min,
-        temp_max=attrs.temp_max,
-        resources_metal=500.0,
-        resources_crystal=500.0,
-        resources_deuterium=0.0,
-        resources_last_updated_at=_dt.now(UTC),
+        galaxy=galaxy, system=system, position=position, name=name,
+        fields_used=0, fields_total=attrs.fields_total,
+        temp_min=attrs.temp_min, temp_max=attrs.temp_max,
+        resources_metal=500.0, resources_crystal=500.0, resources_deuterium=0.0,
+        resources_last_updated_at=datetime.now(UTC),
     )
     db.add(planet)
     await db.flush()
-
-    # Bootstrap building rows
     for bt in BuildingType:
         db.add(Building(planet_id=planet.id, building_type=bt.value, level=0))
     await db.commit()
@@ -366,12 +253,13 @@ async def admin_create_planet(
 
 
 # ============================================================================
-# Planet edit (resources, buildings, ships, defenses)
+# Planet edit
 # ============================================================================
 @router.get("/admin/user/{user_id}/planet/{planet_id}", response_class=HTMLResponse)
 async def admin_planet_edit(
     user_id: int,
     planet_id: int,
+    request: Request,
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
@@ -382,118 +270,42 @@ async def admin_planet_edit(
     planet = await db.get(Planet, planet_id)
     if planet is None or planet.owner_user_id != user_id:
         return HTMLResponse("planet not found", status_code=404)
-
     target = await db.get(User, user_id)
 
-    # Buildings, ships, defenses
     bld_res = await db.execute(select(Building).where(Building.planet_id == planet_id))
     bld_map = {b.building_type: b.level for b in bld_res.scalars().all()}
+    building_fields = [
+        {"key": bt.value, "label": BUILDING_LABELS[bt], "level": bld_map.get(bt.value, 0)}
+        for bt in BuildingType
+    ]
 
     ship_res = await db.execute(
         select(PlanetShip).where(PlanetShip.planet_id == planet_id)
     )
     ship_map = {s.ship_type: s.count for s in ship_res.scalars().all()}
+    ship_fields = [
+        {"key": st.value, "label": SHIP_LABELS[st], "count": ship_map.get(st.value, 0)}
+        for st in ShipType
+    ]
 
     def_res = await db.execute(
         select(PlanetDefense).where(PlanetDefense.planet_id == planet_id)
     )
     def_map = {d.defense_type: d.count for d in def_res.scalars().all()}
+    defense_fields = [
+        {"key": dt.value, "label": DEFENSE_LABELS[dt], "count": def_map.get(dt.value, 0)}
+        for dt in DefenseType
+    ]
 
-    bld_fields = []
-    for bt in BuildingType:
-        bld_fields.append(f"""
-<label class="field" style="display:inline-block; width: 24%; margin-right: 0.5%;">
-  <span class="field-label">{BUILDING_LABELS[bt]}</span>
-  <input type="number" name="bld_{bt.value}" value="{bld_map.get(bt.value, 0)}" min="0" max="100">
-</label>""")
-
-    ship_fields = []
-    for st in ShipType:
-        ship_fields.append(f"""
-<label class="field" style="display:inline-block; width: 24%; margin-right: 0.5%;">
-  <span class="field-label">{SHIP_LABELS[st]}</span>
-  <input type="number" name="ship_{st.value}" value="{ship_map.get(st.value, 0)}" min="0">
-</label>""")
-
-    def_fields = []
-    for dt in DefenseType:
-        def_fields.append(f"""
-<label class="field" style="display:inline-block; width: 24%; margin-right: 0.5%;">
-  <span class="field-label">{DEFENSE_LABELS[dt]}</span>
-  <input type="number" name="def_{dt.value}" value="{def_map.get(dt.value, 0)}" min="0">
-</label>""")
-
-    body = f"""
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
-    <span class="topbar-user">editing planet <b>{planet.name}</b> ({planet.galaxy}:{planet.system}:{planet.position})</span>
-  </div>
-  <div class="topbar-right">
-    <a href="/admin/user/{user_id}">&larr; back to {target.username if target else 'user'}</a>
-    <a href="/admin" style="margin-left:1rem;">admin</a>
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
-
-<form action="/admin/user/{user_id}/planet/{planet_id}" method="post">
-
-<div class="card">
-  <h2 class="card-title">Planet metadata</h2>
-  <div class="grid-3">
-    <label class="field"><span class="field-label">Name</span>
-      <input type="text" name="name" value="{planet.name}" maxlength="32"></label>
-    <label class="field"><span class="field-label">Fields used</span>
-      <input type="number" name="fields_used" value="{planet.fields_used}" min="0" max="{planet.fields_total}"></label>
-    <label class="field"><span class="field-label">Fields total</span>
-      <input type="number" name="fields_total" value="{planet.fields_total}" min="1" max="500"></label>
-    <label class="field"><span class="field-label">Temp min</span>
-      <input type="number" name="temp_min" value="{planet.temp_min}" min="-300" max="300"></label>
-    <label class="field"><span class="field-label">Temp max</span>
-      <input type="number" name="temp_max" value="{planet.temp_max}" min="-300" max="300"></label>
-    <div></div>
-  </div>
-</div>
-
-<div class="card">
-  <h2 class="card-title">Resources</h2>
-  <div class="grid-3">
-    <label class="field"><span class="field-label">Metal</span>
-      <input type="number" name="metal" value="{int(planet.resources_metal)}" min="0"></label>
-    <label class="field"><span class="field-label">Crystal</span>
-      <input type="number" name="crystal" value="{int(planet.resources_crystal)}" min="0"></label>
-    <label class="field"><span class="field-label">Deuterium</span>
-      <input type="number" name="deuterium" value="{int(planet.resources_deuterium)}" min="0"></label>
-  </div>
-</div>
-
-<div class="card">
-  <h2 class="card-title">Buildings <small>set level</small></h2>
-  <div>{''.join(bld_fields)}</div>
-</div>
-
-<div class="card">
-  <h2 class="card-title">Ships <small>set count</small></h2>
-  <div>{''.join(ship_fields)}</div>
-</div>
-
-<div class="card">
-  <h2 class="card-title">Defenses <small>set count</small></h2>
-  <div>{''.join(def_fields)}</div>
-</div>
-
-<button type="submit" style="width: 100%; padding: 1rem; font-size: 1rem; margin-top: 1rem;">
-  Apply all changes
-</button>
-</form>
-
-<form action="/admin/user/{user_id}/planet/{planet_id}/delete" method="post" style="margin-top: 1rem;">
-  <button type="submit" class="ghost" style="color:#ef4444; border-color:#ef4444; width: auto; padding: 0.5rem 1rem;">
-    Delete this planet (irreversible)
-  </button>
-</form>
-"""
-    return HTMLResponse(_shell(f"Edit planet {planet.name} &middot; Admin", body))
+    return templates.TemplateResponse(name="admin/planet.html", request=request, context={
+            "request": request,
+            "planet": planet,
+            "target": target,
+            "building_fields": building_fields,
+            "ship_fields": ship_fields,
+            "defense_fields": defense_fields,
+        },
+    )
 
 
 @router.post("/admin/user/{user_id}/planet/{planet_id}")
@@ -513,8 +325,6 @@ async def admin_save_planet(
         return HTMLResponse("planet not found", status_code=404)
 
     form = await request.form()
-
-    # Planet meta + resources
     if (name := form.get("name")):
         planet.name = str(name)[:32]
     for fld in ("fields_used", "fields_total", "temp_min", "temp_max"):
@@ -529,10 +339,8 @@ async def admin_save_planet(
                 setattr(planet, dst, float(max(0, int(form[src]))))
             except ValueError:
                 pass
-    from datetime import UTC, datetime as _dt
-    planet.resources_last_updated_at = _dt.now(UTC)
+    planet.resources_last_updated_at = datetime.now(UTC)
 
-    # Buildings
     for bt in BuildingType:
         key = f"bld_{bt.value}"
         if key not in form:
@@ -552,7 +360,6 @@ async def admin_save_planet(
         else:
             row.level = lvl
 
-    # Ships
     for st in ShipType:
         key = f"ship_{st.value}"
         if key not in form:
@@ -573,7 +380,6 @@ async def admin_save_planet(
         else:
             row.count = cnt
 
-    # Defenses
     for dt in DefenseType:
         key = f"def_{dt.value}"
         if key not in form:

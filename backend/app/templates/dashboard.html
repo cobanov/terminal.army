@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · sakusen 策戦{% endblock %}
+
+{% block content %}
+{% include "_topbar.html" %}
+
+{# planet tabs #}
+{% if all_planets|length > 1 %}
+<div class="planet-tabs">
+  {% for p in all_planets %}
+    <a href="/dashboard?planet_id={{ p.id }}"
+       class="planet-tab {% if p.id == current_planet.id %}active{% endif %}">
+      {{ p.name }} <small style="color:#525252">{{ p.galaxy }}:{{ p.system }}:{{ p.position }}</small>
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# planet summary card #}
+<div class="card">
+  <h2 class="card-title">
+    {{ current_planet.name }}
+    <small>{{ current_planet.galaxy }}:{{ current_planet.system }}:{{ current_planet.position }}</small>
+  </h2>
+  <div class="grid-3">
+    <div>
+      <div class="metric">
+        <div class="metric-label">Metal</div>
+        <div class="metric-value metal">{{ fmt_int(current_planet.resources_metal) }}</div>
+        <div class="metric-sub">+{{ '%.0f' % production.metal_per_hour }}/h</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Crystal</div>
+        <div class="metric-value crystal">{{ fmt_int(current_planet.resources_crystal) }}</div>
+        <div class="metric-sub">+{{ '%.0f' % production.crystal_per_hour }}/h</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Deuterium</div>
+        <div class="metric-value deut">{{ fmt_int(current_planet.resources_deuterium) }}</div>
+        <div class="metric-sub">+{{ '%.0f' % production.deuterium_per_hour }}/h</div>
+      </div>
+    </div>
+    <div>
+      <div class="metric">
+        <div class="metric-label">Energy produced</div>
+        <div class="metric-value">{{ production.energy_produced }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Energy used</div>
+        <div class="metric-value">{{ production.energy_consumed }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Balance</div>
+        <div class="metric-value {{ 'pos' if production.energy_balance >= 0 else 'neg' }}">
+          {{ '{:+d}'.format(production.energy_balance) }}
+        </div>
+        <div class="metric-sub">factor {{ '%.2f' % production.production_factor }}x</div>
+      </div>
+    </div>
+    <div>
+      <div class="metric">
+        <div class="metric-label">Fields</div>
+        <div class="metric-value">{{ current_planet.fields_used }} / {{ current_planet.fields_total }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Temperature</div>
+        <div class="metric-value">{{ current_planet.temp_min }}° / {{ current_planet.temp_max }}°C</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Coordinate</div>
+        <div class="metric-value">{{ current_planet.galaxy }}:{{ current_planet.system }}:{{ current_planet.position }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# main grid: queue+activity on left, buildings on right #}
+<div class="grid-2">
+  <div>
+    {# Build queue #}
+    <div class="card">
+      <h2 class="card-title">Build queue <small>{{ active_queue|length }} / 5 active</small></h2>
+      <table>
+        <thead>
+          <tr><th>id</th><th>type</th><th>item</th><th class="right">to</th><th class="right">done at</th></tr>
+        </thead>
+        <tbody>
+          {% if active_queue %}
+            {% for q in active_queue %}
+            <tr>
+              <td class="dim">#{{ q.id }}</td>
+              <td>{{ q.queue_type }}</td>
+              <td><b>{{ q.item_key.replace('_', ' ').title() }}</b></td>
+              <td class="right">L{{ q.target_level }}</td>
+              <td class="right success">
+                {{ local_hhmmss(q.finished_at) }}
+                <span class="dim">({{ remaining_str(q.finished_at) }})</span>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="5" class="empty-state">queue empty</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Recent activity #}
+    <div class="card">
+      <h2 class="card-title">Recent activity <small>last {{ logs|length }} events</small></h2>
+      <table>
+        <thead><tr><th>when</th><th>type</th><th>item</th></tr></thead>
+        <tbody>
+          {% if logs %}
+            {% for q in logs %}
+            <tr>
+              <td class="dim">{{ local_hhmmss(q.finished_at) }}</td>
+              <td class="{{ 'success' if q.queue_type == 'building' else 'muted' }}">
+                ✓ {{ q.queue_type }}
+              </td>
+              <td><b>{{ q.item_key.replace('_', ' ').title() }}</b> <span class="dim">L{{ q.target_level }}</span></td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="3" class="empty-state">no activity yet</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2 class="card-title">Buildings <small>{{ built_count }} built</small></h2>
+      <table>
+        <thead><tr><th>building</th><th class="right">level</th></tr></thead>
+        <tbody>
+          {% for b in buildings %}
+          <tr>
+            <td class="{% if b.level == 0 %}muted{% endif %}">{{ b.label }}</td>
+            <td class="right {% if b.level == 0 %}muted{% endif %}">L{{ b.level }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

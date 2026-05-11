@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard · sakusen 策戦{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦</span>
+    <span class="topbar-server">{{ server_name }}</span>
+    <span class="topbar-user">leaderboard</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/dashboard">&larr; dashboard</a>
+    <a href="/me" style="margin-left:1rem;">account</a>
+    <a href="/alliances" style="margin-left:1rem;">alliances</a>
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Top players <small>{{ rows|length }} of {{ total_players }} · {{ server_name }}</small></h2>
+  <table>
+    <thead>
+      <tr>
+        <th class="right">#</th>
+        <th>player</th>
+        <th>alliance</th>
+        <th class="right">buildings</th>
+        <th class="right">research</th>
+        <th class="right">fleet</th>
+        <th class="right">total points</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr {% if r.is_me %}style="background:#1a140a;"{% endif %}>
+        <td class="right {% if r.rank <= 3 %}metric-value pos{% endif %}">
+          {% if r.rank == 1 %}🥇{% elif r.rank == 2 %}🥈{% elif r.rank == 3 %}🥉{% else %}{{ r.rank }}{% endif %}
+        </td>
+        <td>
+          <b>{{ r.username }}</b>
+          {% if r.is_me %}<span class="dim">(you)</span>{% endif %}
+        </td>
+        <td>
+          {% if r.alliance_tag %}
+            <a href="/alliances/{{ r.alliance_tag }}">[{{ r.alliance_tag }}]</a>
+          {% else %}
+            <span class="dim">—</span>
+          {% endif %}
+        </td>
+        <td class="right dim">{{ fmt_int(r.building_points) }}</td>
+        <td class="right dim">{{ fmt_int(r.research_points) }}</td>
+        <td class="right dim">{{ fmt_int(r.fleet_points) }}</td>
+        <td class="right metric-value"><b>{{ fmt_int(r.total_points) }}</b></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if my_rank %}
+  <p class="hint" style="margin-top:1rem;">
+    Your rank: <b style="color:#fbbf24;">#{{ my_rank }}</b> of {{ total_players }} players
+    · {{ fmt_int(my_points) }} total points
+  </p>
+  {% endif %}
+
+  <p class="hint" style="margin-top:0.5rem;">
+    Score = resources invested in buildings + research + ships.
+    Updates automatically on each upgrade.
+  </p>
+</div>
+{% endblock %}

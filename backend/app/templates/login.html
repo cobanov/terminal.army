@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Sign in · sakusen 策戦{% endblock %}
+{% block shell_class %}login-shell{% endblock %}
+
+{% block content %}
+<div class="login-container">
+  {% include "_logo.html" %}
+
+  {% if code %}
+    <div class="info-banner">
+      <strong>Terminal authentication</strong> &middot;
+      sign in to authorize your <code>sakusen</code> CLI session.
+      You can close this tab when you see the success page.
+    </div>
+  {% endif %}
+  {% if err %}<div class="err">{{ err }}</div>{% endif %}
+  {% if ok %}<div class="ok-banner">{{ ok }}</div>{% endif %}
+
+  <div class="card">
+    <h2 class="card-title">Sign in <small>welcome back</small></h2>
+    <form action="/signin{{ '?code=' + code if code else '' }}" method="post" autocomplete="on">
+      <label class="field">
+        <span class="field-label">Username</span>
+        <input type="text" name="username" required autocomplete="username" autofocus>
+      </label>
+      <label class="field">
+        <span class="field-label">Password</span>
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button type="submit">Continue &rarr;</button>
+    </form>
+  </div>
+
+  <p class="switch">
+    Don't have an account?
+    <a href="/signup{{ '?code=' + code if code else '' }}">Create one</a>
+  </p>
+  <p class="switch" style="margin-top:0.5rem;">
+    <a href="/install" style="color:#525252;">&rarr; how to install the CLI</a>
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}sakusen 策戦{% endblock %}</title>
+<link rel="stylesheet" href="/static/main.css">
+{% block head_extra %}{% endblock %}
+</head>
+<body>
+<div class="{% block shell_class %}dash-shell{% endblock %}">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

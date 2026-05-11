@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Sign up · sakusen 策戦{% endblock %}
+{% block shell_class %}login-shell{% endblock %}
+
+{% block content %}
+<div class="login-container">
+  {% include "_logo.html" %}
+
+  {% if code %}
+    <div class="info-banner">
+      <strong>Terminal authentication</strong> &middot;
+      create an account to authorize your <code>sakusen</code> CLI session.
+    </div>
+  {% endif %}
+  {% if err %}<div class="err">{{ err }}</div>{% endif %}
+  {% if ok %}<div class="ok-banner">{{ ok }}</div>{% endif %}
+
+  <div class="card">
+    <h2 class="card-title">Create account <small>new commander</small></h2>
+    <form action="/signup{{ '?code=' + code if code else '' }}" method="post" autocomplete="on">
+      <label class="field">
+        <span class="field-label">Username<span class="hint-inline">3-32 chars</span></span>
+        <input type="text" name="username" minlength="3" maxlength="32" required autocomplete="username" autofocus>
+      </label>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <input type="email" name="email" required autocomplete="email">
+      </label>
+      <label class="field">
+        <span class="field-label">Password<span class="hint-inline">6+ chars</span></span>
+        <input type="password" name="password" minlength="6" required autocomplete="new-password">
+      </label>
+      <button type="submit">Sign up &rarr;</button>
+    </form>
+    <p class="hint">A homeworld will be assigned automatically. You will be signed in immediately.</p>
+  </div>
+
+  <p class="switch">
+    Already have an account?
+    <a href="/login{{ '?code=' + code if code else '' }}">Sign in</a>
+  </p>
+  <p class="switch" style="margin-top:0.5rem;">
+    <a href="/install" style="color:#525252;">&rarr; how to install the CLI</a>
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}[{{ alliance.tag }}] {{ alliance.name }} · sakusen 策戦{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦</span>
+    <span class="topbar-server">{{ server_name }}</span>
+    <span class="topbar-user">alliance [{{ alliance.tag }}]</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/alliances">&larr; all alliances</a>
+    <a href="/dashboard" style="margin-left:1rem;">dashboard</a>
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">
+    [{{ alliance.tag }}] {{ alliance.name }}
+    <small>founded {{ alliance.created_at.strftime("%Y-%m-%d") if alliance.created_at else "?" }}</small>
+  </h2>
+  <p>{{ alliance.description or "(no description set)" }}</p>
+  <p class="hint">Founder: <b>{{ founder_username }}</b></p>
+  {% if is_member %}
+    <p style="margin-top:1rem;">
+      <form action="/alliances/{{ alliance.tag }}/leave" method="post" style="display:inline;">
+        <button type="submit" class="ghost" style="width:auto; padding:0.4rem 1rem; color:#ef4444; border-color:#ef4444;">
+          Leave alliance
+        </button>
+      </form>
+    </p>
+  {% elif not my_alliance %}
+    <p style="margin-top:1rem;">
+      <form action="/alliances/{{ alliance.tag }}/join" method="post" style="display:inline;">
+        <button type="submit" style="width:auto; padding:0.4rem 1rem;">Join this alliance &rarr;</button>
+      </form>
+    </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 class="card-title">Roster <small>{{ members|length }} members</small></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>player</th>
+        <th>role</th>
+        <th>joined</th>
+        <th class="right">total points</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in members %}
+      <tr {% if m.is_me %}style="background:#1a140a;"{% endif %}>
+        <td>
+          <b>{{ m.username }}</b>
+          {% if m.is_me %}<span class="dim">(you)</span>{% endif %}
+        </td>
+        <td>
+          {% if m.role == 'founder' %}<span style="color:#fbbf24;">{{ m.role }}</span>
+          {% else %}<span class="dim">{{ m.role }}</span>{% endif %}
+        </td>
+        <td class="dim">{{ m.joined_at.strftime("%Y-%m-%d") if m.joined_at else "?" }}</td>
+        <td class="right">{{ fmt_int(m.total_points) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

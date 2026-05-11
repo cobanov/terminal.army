@@ -1,0 +1,22 @@
+<meta http-equiv="refresh" content="10">
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦</span>
+    <span class="topbar-server">{{ server_name }} · {{ registered_count }}/{{ server_max_users }}</span>
+    <span class="topbar-user">commander <b>{{ user.username }}</b>{% if alliance_tag %} <span style="color:#fbbf24;">[{{ alliance_tag }}]</span>{% endif %}</span>
+  </div>
+  <div class="topbar-right">
+    {% if lobby_url %}<a href="{{ lobby_url }}" style="margin-right:1rem;">&larr; lobby</a>{% endif %}
+    {% if unread > 0 %}
+      <span class="ok">✉ {{ unread }} new</span>
+    {% else %}
+      <span style="color:#525252">✉ inbox</span>
+    {% endif %}
+    <a href="/dashboard">refresh</a>
+    <a href="/me">account</a>
+    <a href="/leaderboard">ranking</a>
+    <a href="/alliances">alliances</a>
+    {% if is_admin %}<a href="/admin">admin</a>{% endif %}
+    <a href="/logout">logout</a>
+  </div>
+</div>

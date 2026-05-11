@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Account · sakusen 策戦{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦</span>
+    <span class="topbar-server">{{ server_name }}</span>
+    <span class="topbar-user">account</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/dashboard">dashboard</a>
+    <a href="/leaderboard" style="margin-left:1rem;">ranking</a>
+    <a href="/alliances" style="margin-left:1rem;">alliances</a>
+    {% if is_admin %}<a href="/admin" style="margin-left:1rem;">admin</a>{% endif %}
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Profile <small>commander</small></h2>
+  <div class="grid-3">
+    <div>
+      <div class="metric-label">Username</div>
+      <div class="metric-value"><b>{{ user.username }}</b></div>
+    </div>
+    <div>
+      <div class="metric-label">Email</div>
+      <div class="metric-value">{{ user.email }}</div>
+    </div>
+    <div>
+      <div class="metric-label">Joined</div>
+      <div class="metric-value">{{ user.created_at.strftime("%Y-%m-%d") if user.created_at else "?" }}</div>
+    </div>
+  </div>
+  {% if alliance %}
+    <div class="metric" style="margin-top:1rem;">
+      <div class="metric-label">Alliance</div>
+      <div class="metric-value"><a href="/alliances/{{ alliance.tag }}">[{{ alliance.tag }}] {{ alliance.name }}</a></div>
+    </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 class="card-title">Planets <small>{{ planets|length }} owned</small></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>id</th><th>name</th><th>coord</th>
+        <th class="right">fields</th>
+        <th class="right">metal</th>
+        <th class="right">crystal</th>
+        <th class="right">deut</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if planets %}
+        {% for p in planets %}
+        <tr>
+          <td>#{{ p.id }}</td>
+          <td><b>{{ p.name }}</b></td>
+          <td class="dim">{{ p.galaxy }}:{{ p.system }}:{{ p.position }}</td>
+          <td class="right">{{ p.fields_used }}/{{ p.fields_total }}</td>
+          <td class="right metric-value metal">{{ fmt_int(p.resources_metal) }}</td>
+          <td class="right metric-value crystal">{{ fmt_int(p.resources_crystal) }}</td>
+          <td class="right metric-value deut">{{ fmt_int(p.resources_deuterium) }}</td>
+          <td><a href="/dashboard?planet_id={{ p.id }}">open</a></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="8" class="empty-state">no planets</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

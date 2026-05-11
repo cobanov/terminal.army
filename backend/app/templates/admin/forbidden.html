@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Access denied · sakusen 策戦{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 480px; margin: 4rem auto;">
+  <h2 class="card-title">Access denied</h2>
+  <p>
+    You are signed in as <b>{{ your_user }}</b>.
+    Only <b>{{ admin }}</b> is the configured operator.
+  </p>
+  <p><a href="/dashboard">&larr; back to dashboard</a></p>
+</div>
+{% endblock %}

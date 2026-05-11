@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ planet.name }} · Admin{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
+    <span class="topbar-user">
+      editing planet <b>{{ planet.name }}</b>
+      ({{ planet.galaxy }}:{{ planet.system }}:{{ planet.position }})
+    </span>
+  </div>
+  <div class="topbar-right">
+    <a href="/admin/user/{{ target.id }}">&larr; back to {{ target.username }}</a>
+    <a href="/admin" style="margin-left:1rem;">admin</a>
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<form action="/admin/user/{{ target.id }}/planet/{{ planet.id }}" method="post">
+
+<div class="card">
+  <h2 class="card-title">Planet metadata</h2>
+  <div class="grid-3">
+    <label class="field">
+      <span class="field-label">Name</span>
+      <input type="text" name="name" value="{{ planet.name }}" maxlength="32">
+    </label>
+    <label class="field">
+      <span class="field-label">Fields used</span>
+      <input type="number" name="fields_used" value="{{ planet.fields_used }}" min="0" max="{{ planet.fields_total }}">
+    </label>
+    <label class="field">
+      <span class="field-label">Fields total</span>
+      <input type="number" name="fields_total" value="{{ planet.fields_total }}" min="1" max="500">
+    </label>
+    <label class="field">
+      <span class="field-label">Temp min</span>
+      <input type="number" name="temp_min" value="{{ planet.temp_min }}" min="-300" max="300">
+    </label>
+    <label class="field">
+      <span class="field-label">Temp max</span>
+      <input type="number" name="temp_max" value="{{ planet.temp_max }}" min="-300" max="300">
+    </label>
+    <div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Resources</h2>
+  <div class="grid-3">
+    <label class="field">
+      <span class="field-label">Metal</span>
+      <input type="number" name="metal" value="{{ planet.resources_metal|int }}" min="0">
+    </label>
+    <label class="field">
+      <span class="field-label">Crystal</span>
+      <input type="number" name="crystal" value="{{ planet.resources_crystal|int }}" min="0">
+    </label>
+    <label class="field">
+      <span class="field-label">Deuterium</span>
+      <input type="number" name="deuterium" value="{{ planet.resources_deuterium|int }}" min="0">
+    </label>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Buildings <small>set level</small></h2>
+  <div>
+    {% for b in building_fields %}
+    <label class="field" style="display:inline-block; width: 24%; margin-right: 0.5%;">
+      <span class="field-label">{{ b.label }}</span>
+      <input type="number" name="bld_{{ b.key }}" value="{{ b.level }}" min="0" max="100">
+    </label>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Ships <small>set count</small></h2>
+  <div>
+    {% for s in ship_fields %}
+    <label class="field" style="display:inline-block; width: 24%; margin-right: 0.5%;">
+      <span class="field-label">{{ s.label }}</span>
+      <input type="number" name="ship_{{ s.key }}" value="{{ s.count }}" min="0">
+    </label>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Defenses <small>set count</small></h2>
+  <div>
+    {% for d in defense_fields %}
+    <label class="field" style="display:inline-block; width: 24%; margin-right: 0.5%;">
+      <span class="field-label">{{ d.label }}</span>
+      <input type="number" name="def_{{ d.key }}" value="{{ d.count }}" min="0">
+    </label>
+    {% endfor %}
+  </div>
+</div>
+
+<button type="submit" style="width: 100%; padding: 1rem; font-size: 1rem; margin-top: 1rem;">
+  Apply all changes
+</button>
+</form>
+
+<form action="/admin/user/{{ target.id }}/planet/{{ planet.id }}/delete" method="post"
+      style="margin-top: 1rem;">
+  <button type="submit" class="ghost"
+          style="color:#ef4444; border-color:#ef4444; width: auto; padding: 0.5rem 1rem;">
+    Delete this planet (irreversible)
+  </button>
+</form>
+{% endblock %}

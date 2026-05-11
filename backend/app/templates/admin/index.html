@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Admin · sakusen 策戦{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦 <span style="color:#ef4444;">[admin]</span></span>
+    <span class="topbar-user">commander <b>{{ admin_user.username }}</b></span>
+  </div>
+  <div class="topbar-right">
+    <a href="/dashboard">dashboard</a>
+    <a href="/me" style="margin-left:1rem;">account</a>
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Universe <small>id #{{ universe.id }}</small></h2>
+  <form action="/admin/universe/speed-form" method="post" style="display:flex; gap:1rem; align-items:end;">
+    <label class="field" style="flex:1;">
+      <span class="field-label">Speed multiplier (economy / fleet / research)</span>
+      <input type="number" name="speed" value="{{ universe.speed_economy }}" min="1" max="100" required>
+    </label>
+    <button type="submit" style="flex:0 0 auto; width: auto; padding: 0.65rem 1.5rem;">Apply</button>
+  </form>
+  <p class="hint">
+    Current: economy={{ universe.speed_economy }}x, fleet={{ universe.speed_fleet }}x,
+    research={{ universe.speed_research }}x. Effect is immediate.
+  </p>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Users <small>{{ users|length }} total</small></h2>
+  <table>
+    <thead>
+      <tr><th>id</th><th>username</th><th>email</th><th class="right">planets</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>#{{ u.id }}</td>
+        <td>
+          <b>{{ u.username }}</b>
+          {% if u.id == admin_user.id %}<span class="ok">(you)</span>{% endif %}
+        </td>
+        <td class="dim">{{ u.email }}</td>
+        <td class="right">{{ u.planet_count }}</td>
+        <td><a href="/admin/user/{{ u.id }}">edit</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

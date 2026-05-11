@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Alliances · sakusen 策戦{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN 策戦</span>
+    <span class="topbar-server">{{ server_name }}</span>
+    <span class="topbar-user">alliances</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/dashboard">&larr; dashboard</a>
+    <a href="/me" style="margin-left:1rem;">account</a>
+    <a href="/leaderboard" style="margin-left:1rem;">ranking</a>
+    <a href="/logout" style="margin-left:1rem;">logout</a>
+  </div>
+</div>
+
+{% if err %}<div class="err">{{ err }}</div>{% endif %}
+{% if ok %}<div class="ok-banner">{{ ok }}</div>{% endif %}
+
+{% if my_alliance %}
+  <div class="card">
+    <h2 class="card-title">Your alliance <small>[{{ my_alliance.tag }}] {{ my_alliance.name }}</small></h2>
+    <p>{{ my_alliance.description or "(no description set)" }}</p>
+    <p style="margin-top:1rem;">
+      <a href="/alliances/{{ my_alliance.tag }}" style="margin-right:1.5rem;">&rarr; view roster</a>
+      <a href="/alliances/{{ my_alliance.tag }}/leave" style="color:#ef4444;">leave alliance</a>
+    </p>
+  </div>
+{% endif %}
+
+<div class="card">
+  <h2 class="card-title">All alliances <small>{{ alliances|length }} active</small></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>tag</th><th>name</th><th class="right">members</th><th>founder</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if alliances %}
+        {% for a in alliances %}
+        <tr>
+          <td><b>[{{ a.tag }}]</b></td>
+          <td><a href="/alliances/{{ a.tag }}">{{ a.name }}</a></td>
+          <td class="right">{{ a.member_count }}</td>
+          <td class="dim">{{ a.founder_username }}</td>
+          <td>
+            {% if not my_alliance and not a.is_member %}
+              <form action="/alliances/{{ a.tag }}/join" method="post" style="display:inline;">
+                <button type="submit" style="width:auto; padding:0.3rem 0.8rem; margin:0; font-size:0.75rem;">Join</button>
+              </form>
+            {% elif a.is_member %}
+              <span class="dim">(member)</span>
+            {% else %}
+              <span class="dim">leave current first</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="5" class="empty-state">no alliances yet — be the first to found one</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% if not my_alliance %}
+<div class="card">
+  <h2 class="card-title">Found a new alliance <small>you become the founder</small></h2>
+  <form action="/alliances/create" method="post">
+    <label class="field">
+      <span class="field-label">Tag <span class="hint-inline">2-6 chars, will appear as [TAG]</span></span>
+      <input type="text" name="tag" minlength="2" maxlength="6" pattern="[A-Za-z0-9]+" required>
+    </label>
+    <label class="field">
+      <span class="field-label">Name <span class="hint-inline">long form</span></span>
+      <input type="text" name="name" minlength="3" maxlength="64" required>
+    </label>
+    <label class="field">
+      <span class="field-label">Description <small class="hint-inline">optional</small></span>
+      <textarea name="description" rows="3" maxlength="500" style="resize:vertical;"></textarea>
+    </label>
+    <button type="submit">Found alliance &rarr;</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
