@@ -394,20 +394,30 @@ async def _user_from_cookie(token: str | None, db: AsyncSession) -> User | None:
     return await db.get(User, uid)
 
 
-def _set_auth_cookie(resp: Response, token: str) -> None:
+def _set_auth_cookie(resp: Response, token: str, request: Request | None = None) -> None:
     settings = get_settings()
-    # Bump to at least 30 days even if JWT_EXPIRE_MINUTES is shorter, so
-    # the browser keeps the cookie even when JWT is still valid via its
-    # own exp claim. Hard cap at JWT expiry.
     max_age_sec = max(30 * 24 * 3600, settings.jwt_expire_minutes * 60)
+
+    # Detect HTTPS automatically: either direct (request.url.scheme) or
+    # behind a TLS-terminating reverse proxy (X-Forwarded-Proto: https).
+    # secure=True is mandatory in modern browsers when SameSite=None and
+    # nice-to-have when SameSite=Lax. We default to True if the request
+    # was over HTTPS.
+    secure = False
+    if request is not None:
+        if request.url.scheme == "https":
+            secure = True
+        elif request.headers.get("x-forwarded-proto") == "https":
+            secure = True
+
     resp.set_cookie(
         key=COOKIE_NAME,
         value=token,
         max_age=max_age_sec,
-        expires=max_age_sec,           # legacy header for older browsers
+        expires=max_age_sec,
         httponly=True,
         samesite="lax",
-        secure=False,                  # explicit: works over plain HTTP
+        secure=secure,
         path="/",
     )
 
@@ -449,13 +459,79 @@ def _remaining_str(dt: datetime) -> str:
 # ============================================================================
 @router.get("/", response_class=HTMLResponse)
 async def root(
+    request: Request,
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
     user = await _user_from_cookie(ogame_token, db)
     if user is not None:
         return RedirectResponse("/dashboard", status_code=302)
-    return RedirectResponse("/login", status_code=302)
+    return await install_page(request)
+
+
+@router.get("/install", response_class=HTMLResponse)
+async def install_page(request: Request) -> Response:
+    """Public landing page: install instructions + sign-in/up links."""
+    # Best-guess backend URL the visitor will use (this server's public URL)
+    host = request.headers.get("host", "sakusen.space")
+    proto = "https" if request.url.scheme == "https" else "http"
+    backend_url = f"{proto}://{host}"
+
+    body = f"""
+<div class="login-container">
+  <pre class="logo">{_LOGO_BANNER}</pre>
+  <p class="tagline">策戦 · terminal · strategy · in space</p>
+
+  <div class="card">
+    <h2 class="card-title">What is this <small>tldr</small></h2>
+    <p>
+      A terminal-native multiplayer space strategy game, in the spirit of
+      OGame. You play from your terminal via the <code>sakusen</code> CLI —
+      every action is a slash-command. Resources accrue in real time. Multiple
+      players share the same universe and can attack, spy on, and message each
+      other.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Install <small>one terminal, one command</small></h2>
+
+    <p class="hint" style="margin-bottom:0.8rem;">1. Install <code>uv</code> if you don't have it:</p>
+    <pre class="key">curl -LsSf https://astral.sh/uv/install.sh | sh</pre>
+
+    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">2. Install the sakusen client:</p>
+    <pre class="key">uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"</pre>
+
+    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">3. Point at this server (add to your shell rc):</p>
+    <pre class="key">export SAKUSEN_BACKEND="{backend_url}"</pre>
+
+    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">4. Start playing:</p>
+    <pre class="key">sakusen</pre>
+
+    <p class="hint" style="margin-top:1rem;">
+      On first launch the CLI opens a browser URL — sign in here, return to
+      the terminal, the TUI starts.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Account <small>browser-side</small></h2>
+    <p>
+      You can also browse a dashboard, edit your profile, and message other
+      players from this web UI.
+    </p>
+    <p style="margin-top:0.8rem;">
+      <a href="/login" style="color:#fbbf24; margin-right:1.5rem;">→ Sign in</a>
+      <a href="/signup" style="color:#fbbf24;">→ Create account</a>
+    </p>
+  </div>
+
+  <p class="switch" style="margin-top:2rem;">
+    Source: <a href="https://github.com/cobanov/space-galactic-tui">github.com/cobanov/space-galactic-tui</a>
+  </p>
+</div>
+"""
+    return HTMLResponse(_shell("Install · sakusen 策戦", body, with_login_layout=True))
 
 
 def _device_banner_html(code: str | None) -> str:
@@ -519,6 +595,9 @@ async def login_page(
   <p class="switch">
     Don't have an account? <a href="/signup{qs}">Create one</a>
   </p>
+  <p class="switch" style="margin-top:0.5rem;">
+    <a href="/install" style="color:#525252;">→ how to install the CLI</a>
+  </p>
 </div>
 """
     return HTMLResponse(_shell("Sign in &middot; sakusen", body, with_login_layout=True))
@@ -568,6 +647,9 @@ async def signup_page(
   <p class="switch">
     Already have an account? <a href="/login{qs}">Sign in</a>
   </p>
+  <p class="switch" style="margin-top:0.5rem;">
+    <a href="/install" style="color:#525252;">→ how to install the CLI</a>
+  </p>
 </div>
 """
     return HTMLResponse(_shell("Sign up &middot; sakusen", body, with_login_layout=True))
@@ -575,6 +657,7 @@ async def signup_page(
 
 @router.post("/signup")
 async def signup_submit(
+    request: Request,
     db: DBSession,
     username: Annotated[str, Form(min_length=3, max_length=32)],
     email: Annotated[str, Form()],
@@ -617,12 +700,13 @@ async def signup_submit(
         return await _terminal_success_page(username)
 
     resp = RedirectResponse("/dashboard", status_code=303)
-    _set_auth_cookie(resp, token)
+    _set_auth_cookie(resp, token, request)
     return resp
 
 
 @router.post("/signin")
 async def signin_submit(
+    request: Request,
     db: DBSession,
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
@@ -648,7 +732,7 @@ async def signin_submit(
         return await _terminal_success_page(username)
 
     resp = RedirectResponse("/dashboard", status_code=303)
-    _set_auth_cookie(resp, token)
+    _set_auth_cookie(resp, token, request)
     return resp
 
 
