@@ -210,6 +210,21 @@ _PAGE_CSS = """
   .info-banner strong { color: #fbbf24; }
 
   .hint { color: #525252; font-size: 0.75rem; margin: 0.5rem 0 0; }
+  .hint-inline { color: #525252; font-size: 0.7rem; font-weight: normal; margin-left: 0.4rem; }
+  .switch {
+    text-align: center;
+    color: #737373;
+    font-size: 0.85rem;
+    margin: 1.5rem 0 0;
+  }
+  .switch a {
+    color: #fbbf24;
+    text-decoration: none;
+    border-bottom: 1px dashed transparent;
+    padding-bottom: 1px;
+    margin-left: 0.3rem;
+  }
+  .switch a:hover { border-color: #fbbf24; }
 
   .key {
     display: block;
@@ -342,12 +357,10 @@ _PAGE_CSS = """
 """
 
 
-_LOGO_BANNER = """  ███████╗██████╗  █████╗  ██████╗███████╗     ██████╗  █████╗ ██╗      █████╗  ██████╗████████╗██╗ ██████╗
-  ██╔════╝██╔══██╗██╔══██╗██╔════╝██╔════╝    ██╔════╝ ██╔══██╗██║     ██╔══██╗██╔════╝╚══██╔══╝██║██╔════╝
-  ███████╗██████╔╝███████║██║     █████╗      ██║  ███╗███████║██║     ███████║██║        ██║   ██║██║
-  ╚════██║██╔═══╝ ██╔══██║██║     ██╔══╝      ██║   ██║██╔══██║██║     ██╔══██║██║        ██║   ██║██║
-  ███████║██║     ██║  ██║╚██████╗███████╗    ╚██████╔╝██║  ██║███████╗██║  ██║╚██████╗   ██║   ██║╚██████╗
-  ╚══════╝╚═╝     ╚═╝  ╚═╝ ╚═════╝╚══════╝     ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝"""
+_LOGO_BANNER = """┌─────────────────────────────┐
+│       S P A C E             │
+│       G A L A C T I C       │
+└─────────────────────────────┘"""
 
 
 def _shell(title: str, body: str, with_login_layout: bool = False) -> str:
@@ -446,6 +459,27 @@ async def root(
     return RedirectResponse("/login", status_code=302)
 
 
+def _device_banner_html(code: str | None) -> str:
+    if not code:
+        return ""
+    return (
+        '<div class="info-banner">'
+        '<strong>Terminal authentication</strong> &middot; '
+        'sign in (or create an account) to authorize your <code>ogame</code> CLI session. '
+        'You can close this tab when you see the success page.'
+        '</div>'
+    )
+
+
+def _alert_html(err: str | None, ok: str | None) -> str:
+    out = ""
+    if err:
+        out += f'<div class="err">{err}</div>'
+    if ok:
+        out += f'<div class="ok-banner">{ok}</div>'
+    return out
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
     db: DBSession,
@@ -460,75 +494,84 @@ async def login_page(
         if user is not None:
             return RedirectResponse("/dashboard", status_code=302)
 
-    banner = ""
-    if code:
-        banner = (
-            f'<div class="info-banner">'
-            f'<strong>Terminal authentication</strong> &middot; '
-            f'sign in below to authorize your <code>ogame</code> terminal session. '
-            f'When you finish, return to the terminal.'
-            f"</div>"
-        )
-    err_html = f'<div class="err">{err}</div>' if err else ""
-    ok_html = f'<div class="ok-banner">{ok}</div>' if ok else ""
-
     qs = f"?code={code}" if code else ""
     body = f"""
 <div class="login-container">
-<pre class="logo">{_LOGO_BANNER}</pre>
-<p class="tagline">terminal-based · ogame clone</p>
+  <pre class="logo">{_LOGO_BANNER}</pre>
+  <p class="tagline">terminal-based · ogame clone</p>
 
-{banner}
-{err_html}
-{ok_html}
+  {_device_banner_html(code)}{_alert_html(err, ok)}
 
-<div class="card">
-  <h2 class="card-title">Sign in <small>existing account</small></h2>
-  <form action="/signin{qs}" method="post" autocomplete="on">
-    <label class="field">
-      <span class="field-label">Username</span>
-      <input type="text" name="username" required autocomplete="username">
-    </label>
-    <label class="field">
-      <span class="field-label">Password</span>
-      <input type="password" name="password" required autocomplete="current-password">
-    </label>
-    <button type="submit">Enter</button>
-  </form>
-</div>
+  <div class="card">
+    <h2 class="card-title">Sign in <small>welcome back</small></h2>
+    <form action="/signin{qs}" method="post" autocomplete="on">
+      <label class="field">
+        <span class="field-label">Username</span>
+        <input type="text" name="username" required autocomplete="username" autofocus>
+      </label>
+      <label class="field">
+        <span class="field-label">Password</span>
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button type="submit">Continue &rarr;</button>
+    </form>
+  </div>
 
-<div class="card">
-  <h2 class="card-title">New account <small>create commander</small></h2>
-  <form action="/signup{qs}" method="post" autocomplete="on">
-    <label class="field">
-      <span class="field-label">Username</span>
-      <input type="text" name="username" minlength="3" maxlength="32" required autocomplete="username">
-    </label>
-    <label class="field">
-      <span class="field-label">Email</span>
-      <input type="email" name="email" required autocomplete="email">
-    </label>
-    <label class="field">
-      <span class="field-label">Password (6+ chars)</span>
-      <input type="password" name="password" minlength="6" required autocomplete="new-password">
-    </label>
-    <button type="submit" class="ghost">Sign up</button>
-  </form>
-  <p class="hint">A homeworld will be assigned automatically at registration.</p>
-</div>
+  <p class="switch">
+    Don't have an account? <a href="/signup{qs}">Create one</a>
+  </p>
 </div>
 """
     return HTMLResponse(_shell("Sign in &middot; Space Galactic", body, with_login_layout=True))
 
 
 @router.get("/signup", response_class=HTMLResponse)
-async def signup_alias(
+async def signup_page(
     db: DBSession,
     code: str | None = None,
+    err: str | None = None,
+    ok: str | None = None,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    """Backward-compatible alias of /login (used by CLI device flow URL)."""
-    return await login_page(db, code=code, ogame_token=ogame_token)
+    if not code:
+        user = await _user_from_cookie(ogame_token, db)
+        if user is not None:
+            return RedirectResponse("/dashboard", status_code=302)
+
+    qs = f"?code={code}" if code else ""
+    body = f"""
+<div class="login-container">
+  <pre class="logo">{_LOGO_BANNER}</pre>
+  <p class="tagline">terminal-based · ogame clone</p>
+
+  {_device_banner_html(code)}{_alert_html(err, ok)}
+
+  <div class="card">
+    <h2 class="card-title">Create account <small>new commander</small></h2>
+    <form action="/signup{qs}" method="post" autocomplete="on">
+      <label class="field">
+        <span class="field-label">Username<span class="hint-inline">3-32 chars</span></span>
+        <input type="text" name="username" minlength="3" maxlength="32" required autocomplete="username" autofocus>
+      </label>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <input type="email" name="email" required autocomplete="email">
+      </label>
+      <label class="field">
+        <span class="field-label">Password<span class="hint-inline">6+ chars</span></span>
+        <input type="password" name="password" minlength="6" required autocomplete="new-password">
+      </label>
+      <button type="submit">Sign up &rarr;</button>
+    </form>
+    <p class="hint">A homeworld will be assigned automatically. You will be signed in immediately.</p>
+  </div>
+
+  <p class="switch">
+    Already have an account? <a href="/login{qs}">Sign in</a>
+  </p>
+</div>
+"""
+    return HTMLResponse(_shell("Sign up &middot; Space Galactic", body, with_login_layout=True))
 
 
 @router.post("/signup")
@@ -544,7 +587,7 @@ async def signup_submit(
     )
     if existing.scalar_one_or_none() is not None:
         return RedirectResponse(
-            f"/login?err=That+username+or+email+is+already+taken{('&code=' + code) if code else ''}",
+            f"/signup?err=That+username+or+email+is+already+taken{('&code=' + code) if code else ''}",
             status_code=303,
         )
 
