@@ -30,13 +30,21 @@ _BUILDING_KEYS = [
 _TECH_KEYS = [
     "energy", "laser", "ion", "hyperspace", "plasma",
     "computer", "astrophysics", "espionage",
+    "combustion_drive", "impulse_drive", "hyperspace_drive",
+    "weapons", "shielding", "armour",
 ]
 
-# Tech tree: (parent -> children)
+# Tech tree: (parent -> children). Each node placed under its deepest
+# tech parent. Drives + shielding parent to energy; hyperspace_drive
+# under hyperspace; weapons, armour, computer are roots.
 _TECH_CHILDREN: dict[str, list[str]] = {
-    "energy": ["laser", "hyperspace"],
+    "energy": [
+        "laser", "hyperspace",
+        "combustion_drive", "impulse_drive", "shielding",
+    ],
     "laser": ["ion"],
     "ion": ["plasma"],
+    "hyperspace": ["hyperspace_drive"],
     "espionage": ["astrophysics"],
 }
 _TECH_REQS: dict[str, dict[str, int]] = {
@@ -48,6 +56,12 @@ _TECH_REQS: dict[str, dict[str, int]] = {
     "computer": {"lab": 1},
     "espionage": {"lab": 3},
     "astrophysics": {"lab": 3, "espionage": 4},
+    "combustion_drive": {"lab": 1, "energy": 1},
+    "impulse_drive": {"lab": 2, "energy": 1},
+    "hyperspace_drive": {"lab": 7, "hyperspace": 3},
+    "weapons": {"lab": 4},
+    "shielding": {"lab": 6, "energy": 3},
+    "armour": {"lab": 2},
 }
 
 
@@ -1013,55 +1027,60 @@ class ReplScreen(Screen):
             for k, v in reqs.items():
                 if k == "lab":
                     if max_lab < v:
-                        missing.append(f"Research Lab L{v}")
+                        missing.append(f"Lab L{v}")
                 else:
                     if levels.get(k, 0) < v:
                         missing.append(f"{k} L{v}")
             return len(missing) == 0, missing
 
         out = Text()
-        out.append("TECH TREE\n", style="bold yellow")
-        out.append(f"(Research Lab max: L{max_lab})\n\n", style="dim")
+        out.append("TECH TREE", style="bold yellow")
+        out.append(f"   (Research Lab max: L{max_lab})\n\n", style="dim")
 
-        def render(node: str, depth: int) -> None:
-            indent = "  " * depth
+        def render(node: str, depth: int, is_last: bool = False) -> None:
+            indent = ""
+            if depth > 0:
+                indent = "  " * (depth - 1) + ("└─ " if is_last else "├─ ")
             lvl = levels.get(node, 0)
             available, missing = _node_available(node)
-            name_style = "bold green" if lvl > 0 else ("yellow" if available else "dim")
-            connector = "└─ " if depth > 0 else ""
-            out.append(indent + connector)
+
+            # Status marker + name
+            if lvl > 0:
+                marker, name_style, lvl_style = "✓", "bold green", "cyan"
+            elif available:
+                marker, name_style, lvl_style = "○", "yellow", "yellow"
+            else:
+                marker, name_style, lvl_style = " ", "dim", "dim"
+
+            out.append(indent)
+            out.append(f"{marker} ", style=name_style)
             out.append(node, style=name_style)
-            out.append(f" L{lvl}", style="cyan" if lvl > 0 else "dim")
-            reqs = _TECH_REQS.get(node, {})
-            if reqs:
-                req_parts = []
-                for k, v in reqs.items():
-                    label = "lab" if k == "lab" else k
-                    cur = max_lab if k == "lab" else levels.get(k, 0)
-                    ok = cur >= v
-                    req_parts.append(f"{label}{v}" + ("" if ok else "!"))
-                out.append("  [", style="dim")
-                out.append(", ".join(req_parts), style="dim")
-                out.append("]", style="dim")
-            if not available and missing:
-                out.append(f"  ✗ {', '.join(missing)}", style="red")
+            out.append(f" L{lvl}", style=lvl_style)
+
+            # Show requirements only when not yet researched AND locked
+            if lvl == 0 and not available and missing:
+                out.append("   needs ", style="dim")
+                out.append(", ".join(missing), style="dim yellow")
             out.append("\n")
-            for child in _TECH_CHILDREN.get(node, []):
-                render(child, depth + 1)
 
-        # Roots = tech with no tech-type prereq
-        for tt in _TECH_KEYS:
-            reqs = _TECH_REQS.get(tt, {})
-            has_tech_parent = any(k != "lab" for k in reqs.keys())
-            if not has_tech_parent:
-                render(tt, 0)
+            children = _TECH_CHILDREN.get(node, [])
+            for i, child in enumerate(children):
+                render(child, depth + 1, is_last=(i == len(children) - 1))
 
-        out.append(
-            "\nLegend: [bold green]done[/bold green]  "
-            "[yellow]available[/yellow]  [dim]locked[/dim]  ✗ missing prereq\n",
-            style="",
-        )
+        roots = [
+            tt for tt in _TECH_KEYS
+            if not any(k != "lab" for k in _TECH_REQS.get(tt, {}).keys())
+        ]
+        for i, tt in enumerate(roots):
+            render(tt, 0, is_last=(i == len(roots) - 1))
+
         self._log.write(out)
+        # Legend as a separate markup-parsed line
+        self._log.write(
+            "[dim]Legend:[/dim] [bold green]✓ done[/bold green]   "
+            "[yellow]○ available[/yellow]   [dim]locked[/dim]   "
+            "[dim yellow]needs ...[/dim yellow] missing prereq"
+        )
 
     async def _cmd_galaxy(self, args: list[str]) -> None:
         if not args:
