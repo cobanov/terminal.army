@@ -97,6 +97,12 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/attack ",    "/attack <g>:<s>:<p>", "attack a target (see /help)"),
     CommandSpec("/transport ", "/transport <g>:<s>:<p>", "transport resources"),
     CommandSpec("/reports",    "/reports [id]",    "list reports or open one"),
+    CommandSpec("/leaderboard","/leaderboard",     "server rankings"),
+    CommandSpec("/alliances",  "/alliances",       "list alliances"),
+    CommandSpec("/alliance",   "/alliance [tag]",  "alliance detail or your own"),
+    CommandSpec("/found ",     "/found <tag> <name>", "found a new alliance"),
+    CommandSpec("/join ",      "/join <tag>",      "join an alliance"),
+    CommandSpec("/leave",      "/leave",           "leave your alliance"),
     CommandSpec("/me",         "/me",              "show my account"),
     CommandSpec("/refresh",    "/refresh",         "force refresh"),
     CommandSpec("/clear",      "/clear",           "clear log"),
@@ -140,6 +146,15 @@ HELP_TEXT = """[bold yellow]sakusen 策戦 · commands[/bold yellow]
   /send <mission> <g>:<s>:<p> <ship>:<n> ...   generic fleet send
   /reports                list espionage + combat reports
   /reports <id>           open one report in detail
+
+[bold]standings[/bold]
+  /leaderboard            server rankings (or /rank, /lb)
+  /alliances              list all alliances
+  /alliance               your alliance detail
+  /alliance <tag>         alliance detail by tag
+  /found <tag> <name>     found a new alliance (tag 2-6 chars)
+  /join <tag>             join an alliance
+  /leave                  leave your alliance (founder must dissolve)
 
 [bold]system[/bold]
   /me                     my account info
@@ -335,6 +350,7 @@ def _nav_text() -> Text:
         ("FLEET", ["/ships", "/build", "/fleets", "/espionage", "/attack", "/transport", "/reports"]),
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", ["/msg", "/inbox", "/players"]),
+        ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
         ("HELP", ["/help"]),
     ]
     t = Text()
@@ -689,34 +705,45 @@ class ReplScreen(Screen):
         if self.app.current_planet_id is None:
             self._right.update("[dim]no planet[/dim]")
             return
-        queue = self._queue_cache
         body = Text()
-        body.append(f"QUEUE ({len(queue)}/5)\n", style="bold yellow")
+
+        # PLANETS — primary section now
+        body.append("PLANETS\n", style="bold yellow")
+        cur_id = self.app.current_planet_id
+        for p in self._planets_cache:
+            marker = "▸ " if p["id"] == cur_id else "  "
+            style = "bold yellow" if p["id"] == cur_id else "cyan"
+            body.append(marker, style=style)
+            body.append(f"{p['name']}\n", style=style)
+            body.append(
+                f"    {p['galaxy']}:{p['system']}:{p['position']}  "
+                f"M {_fmt_int(p['resources_metal'])}\n",
+                style="dim",
+            )
+        body.append("\n[dim]switch:[/dim] [yellow]/switch <id>[/yellow]\n")
+
+        # QUEUE — compact
+        queue = self._queue_cache
+        body.append(f"\nQUEUE ({len(queue)}/5)\n", style="bold yellow")
         if not queue:
-            body.append("  (empty)\n", style="dim")
+            body.append("  empty\n", style="dim")
         else:
-            for q in queue:
+            for q in queue[:3]:  # show first 3
                 remaining = _remaining_str(q["finished_at"])
-                local_hhmmss = _local_hhmmss(q["finished_at"])
                 body.append(f"  #{q['id']} ", style="cyan")
-                body.append(f"{q['queue_type']}\n", style="bold")
-                body.append(f"    {q['item_key']} -> L{q['target_level']}\n", style="yellow")
+                body.append(f"{q['item_key']}\n", style="dim")
                 rem_style = "green" if remaining != "done" else "dim"
-                body.append(f"    {local_hhmmss} ", style="dim")
-                body.append(f"({remaining})\n", style=rem_style)
+                body.append(f"    {remaining}\n", style=rem_style)
+            if len(queue) > 3:
+                body.append(f"  +{len(queue) - 3} more\n", style="dim")
 
-        body.append("\nMESSAGES\n", style="bold yellow")
+        # Compact one-liner for messages
+        body.append("\nMESSAGES  ", style="bold yellow")
         if self._unread_count == 0:
-            body.append("  no unread\n", style="dim")
+            body.append("(none)\n", style="dim")
         else:
-            body.append(f"  {self._unread_count} unread\n", style="bold magenta")
-            body.append("  /inbox to read\n", style="dim")
-
-        body.append("\nTIPS\n", style="bold yellow")
-        body.append("  / -> command list\n", style="dim")
-        body.append("  Tab -> autocomplete\n", style="dim")
-        body.append("  /refresh -> reload\n", style="dim")
-        body.append("  /help -> all commands\n", style="dim")
+            body.append(f"{self._unread_count} new", style="bold magenta")
+            body.append(" /inbox\n", style="dim")
         self._right.update(body)
 
     def _username(self) -> str:
@@ -898,6 +925,8 @@ class ReplScreen(Screen):
             "atk": "attack",
             "trans": "transport", "tx": "transport",
             "rep": "reports",
+            "lb": "leaderboard", "rank": "leaderboard", "ranking": "leaderboard",
+            "ally": "alliance", "all": "alliances",
         }
         cmd = aliases.get(cmd, cmd)
 
@@ -1251,6 +1280,154 @@ class ReplScreen(Screen):
             f"[green]cancelled[/green] {r['item_key']}  "
             f"refund {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}"
         )
+
+    # ------- Leaderboard / Alliance --------------------------------------
+    async def _cmd_leaderboard(self, args: list[str]) -> None:
+        data = await self.app.client.leaderboard(limit=30)
+        my_username = self._username()
+        t = Table(show_header=True, header_style="bold yellow", box=None)
+        t.add_column("#", justify="right", style="dim")
+        t.add_column("player", style="bold")
+        t.add_column("ally", style="cyan")
+        t.add_column("buildings", justify="right", style="dim")
+        t.add_column("research", justify="right", style="dim")
+        t.add_column("fleet", justify="right", style="dim")
+        t.add_column("total", justify="right", style="bold yellow")
+        for r in data["rows"]:
+            medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(r["rank"], str(r["rank"]))
+            name = r["username"]
+            if name == my_username:
+                name = f"[bold green]{name}[/bold green]"
+            ally = f"[{r['alliance_tag']}]" if r.get("alliance_tag") else "-"
+            t.add_row(
+                medal, name, ally,
+                _fmt_int(r["building_points"]),
+                _fmt_int(r["research_points"]),
+                _fmt_int(r["fleet_points"]),
+                _fmt_int(r["total_points"]),
+            )
+        self._log.write(t)
+        if data.get("my_rank"):
+            self._log.write(
+                f"[dim]your rank:[/dim] [bold yellow]#{data['my_rank']}[/bold yellow] "
+                f"of {data['total_players']}  "
+                f"[dim]({_fmt_int(data.get('my_total') or 0)} pts)[/dim]"
+            )
+
+    async def _cmd_alliances(self, args: list[str]) -> None:
+        rows = await self.app.client.list_alliances()
+        my = await self.app.client.my_alliance()
+        my_tag = my["tag"] if my else None
+        if not rows:
+            self._log.write("[dim]no alliances yet — found one with[/dim] [yellow]/found <tag> <name>[/yellow]")
+            return
+        t = Table(show_header=True, header_style="bold yellow", box=None)
+        t.add_column("tag", style="bold yellow")
+        t.add_column("name")
+        t.add_column("members", justify="right")
+        t.add_column("founder", style="dim")
+        for r in rows:
+            tag = f"[{r['tag']}]"
+            if r['tag'] == my_tag:
+                tag = f"[bold green]{tag}[/bold green]"
+            t.add_row(tag, r["name"], str(r["member_count"]), r["founder_username"])
+        self._log.write(t)
+        if my_tag:
+            self._log.write(
+                f"[dim]you are in[/dim] [bold yellow][{my_tag}][/bold yellow]"
+            )
+        else:
+            self._log.write(
+                "[dim]join one with[/dim] [yellow]/join <tag>[/yellow] "
+                "[dim]or found yours with[/dim] [yellow]/found <tag> <name>[/yellow]"
+            )
+
+    async def _cmd_alliance(self, args: list[str]) -> None:
+        if not args:
+            # Show your own alliance, or fail
+            my = await self.app.client.my_alliance()
+            if my is None:
+                self._log.write(
+                    "[dim]you are not in any alliance.[/dim] "
+                    "[yellow]/alliances[/yellow] [dim]to browse[/dim]"
+                )
+                return
+            await self._render_alliance(my)
+            return
+        # Specific alliance by tag
+        tag = args[0].upper()
+        try:
+            data = await self.app.client.get_alliance(tag)
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        await self._render_alliance(data)
+
+    async def _render_alliance(self, data: dict) -> None:
+        header = Text()
+        header.append("━━━ ", style="bold yellow")
+        header.append(f"[{data['tag']}] {data['name']}", style="bold yellow")
+        header.append(f" · {data['member_count']} members ━━━", style="dim")
+        self._log.write(header)
+        if data.get("description"):
+            self._log.write(f"[dim]{data['description']}[/dim]")
+        self._log.write(f"[dim]founder:[/dim] [bold]{data['founder_username']}[/bold]")
+
+        t = Table(show_header=True, header_style="bold yellow", box=None)
+        t.add_column("player", style="bold")
+        t.add_column("role", style="dim")
+        t.add_column("joined", style="dim")
+        for m in data.get("members", []):
+            role_style = "yellow" if m["role"] == "founder" else "dim"
+            t.add_row(
+                m["username"],
+                Text(m["role"], style=role_style),
+                str(m["joined_at"])[:10],
+            )
+        self._log.write(t)
+
+    async def _cmd_found(self, args: list[str]) -> None:
+        if len(args) < 2:
+            self._log.write(
+                "[red]usage:[/red] /found <TAG> <name...> "
+                "[dim](TAG = 2-6 alphanumeric chars)[/dim]"
+            )
+            return
+        tag = args[0]
+        name = " ".join(args[1:])
+        try:
+            data = await self.app.client.create_alliance(tag, name)
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write(
+            f"[green]founded[/green] [bold yellow][{data['tag']}][/bold yellow] {data['name']}"
+        )
+
+    async def _cmd_join(self, args: list[str]) -> None:
+        if not args:
+            self._log.write("[red]usage:[/red] /join <tag>")
+            return
+        try:
+            data = await self.app.client.join_alliance(args[0])
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write(
+            f"[green]joined[/green] [bold yellow][{data['tag']}][/bold yellow] {data['name']}"
+        )
+
+    async def _cmd_leave(self, args: list[str]) -> None:
+        my = await self.app.client.my_alliance()
+        if my is None:
+            self._log.write("[dim]you are not in any alliance[/dim]")
+            return
+        try:
+            await self.app.client.leave_alliance(my["tag"])
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write(f"[green]left[/green] [bold yellow][{my['tag']}][/bold yellow]")
 
     async def _cmd_refresh(self, args: list[str]) -> None:
         await self._refresh_planets()

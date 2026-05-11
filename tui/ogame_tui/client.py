@@ -208,3 +208,36 @@ class OGameClient:
 
     async def get_report(self, report_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/reports/{report_id}")
+
+    # ----- Leaderboard ----------------------------------------------------
+    async def leaderboard(self, limit: int = 50) -> dict[str, Any]:
+        return await self._request("GET", "/api/leaderboard", params={"limit": limit})
+
+    # ----- Alliance -------------------------------------------------------
+    async def list_alliances(self) -> list[dict[str, Any]]:
+        return await self._request("GET", "/api/alliances")
+
+    async def get_alliance(self, tag: str) -> dict[str, Any]:
+        return await self._request("GET", f"/api/alliances/{tag}")
+
+    async def create_alliance(
+        self, tag: str, name: str, description: str = ""
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST", "/api/alliances",
+            json={"tag": tag, "name": name, "description": description},
+        )
+
+    async def join_alliance(self, tag: str) -> dict[str, Any]:
+        return await self._request("POST", f"/api/alliances/{tag}/join")
+
+    async def leave_alliance(self, tag: str) -> dict[str, Any]:
+        return await self._request("POST", f"/api/alliances/{tag}/leave")
+
+    async def my_alliance(self) -> dict[str, Any] | None:
+        try:
+            return await self._request("GET", "/api/me/alliance")
+        except APIError as e:
+            if e.status_code == 404:
+                return None
+            raise
