@@ -147,7 +147,7 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/inbox", "/inbox [user]", "conversations (or chat with user)"),
     CommandSpec("/logs", "/logs [N]", "recent activity on this planet"),
     CommandSpec("/ships", "/ships", "ships in shipyard + buildable"),
-    CommandSpec("/build ", "/build <thing> [n]", "build ship (with count) or upgrade building"),
+    CommandSpec("/build ", "/build <ship> <n>", "build N ships in shipyard"),
     CommandSpec("/defense", "/defense", "planetary defenses + buildable"),
     CommandSpec("/defend ", "/defend <type> <n>", "build N defenses on planet"),
     CommandSpec("/fleets", "/fleets", "active fleet movements"),
@@ -212,7 +212,8 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]fleet & combat[/bold]
   /ships                  list ships in shipyard + buildable types
-  /build <thing>          ship: /build small_cargo 5  ·  building: /build robotics_factory
+  /build <ship> <count>   construct ships in the shipyard
+  /upgrade <building>     upgrade a resource or facility building
 /defense                planetary defenses + buildable structures
 /defend <type> <n>      build N defenses (e.g. /defend rocket_launcher 20)
   /fleets                 active fleet movements
@@ -305,22 +306,14 @@ def suggestions_for(
             keys = _enc.suggestions(arg_l, limit=20) if arg_l else list(_enc.ALL.keys())[:20]
             return [(f"/info {k}", _make_label(f"/info {k}", _enc.ALL[k].category)) for k in keys]
         if cmd_l in ("/build", "/bs"):
-            # /build accepts both buildings (forwards to /upgrade — no count)
-            # and ships (count required).
+            # Ships only. Buildings live under /upgrade.
             if " " in arg:
                 return []
-            out_build: list[tuple[str, Text]] = []
-            for k in _BUILDING_KEYS:
-                if k.startswith(arg_l):
-                    out_build.append(
-                        (f"/build {k}", _make_label(f"/build {k}", "upgrade building"))
-                    )
-            for k in _SHIP_KEYS:
-                if k.startswith(arg_l):
-                    out_build.append(
-                        (f"/build {k} ", _make_label(f"/build {k} <count>", "build ship"))
-                    )
-            return out_build
+            return [
+                (f"/build {k} ", _make_label(f"/build {k} <count>", "build ship"))
+                for k in _SHIP_KEYS
+                if k.startswith(arg_l)
+            ]
         if cmd_l in ("/defend", "/dfd"):
             if " " in arg:
                 return []
@@ -1252,18 +1245,16 @@ class ReplScreen(Screen):
         self._planet_card.update(layout)
 
     def _render_right_panel(self) -> None:
-        # Color rules mirror the left nav's categories so a queue/mission
-        # row carries the same hue as the command that produced it:
-        #   - All section headers → bold yellow
-        #   - PLANETS bodies      → green (matches left "PLANET" group)
-        #   - Planet code         → cyan (identifier/info color, matches FLEET)
-        #   - Active planet ▸     → bold yellow (single emphasis per row)
-        #   - QUEUES progress     → green (in progress = on track)
-        #   - MISSIONS outbound   → cyan (fleet ops)
-        #   - MISSIONS hostile    → red (alert)
-        #   - QUESTS              → magenta (long-term progression)
-        #   - MESSAGES alert      → magenta (unread)
+        # Restrained palette: most rows render in default foreground so
+        # the panel reads as a status table, not a rainbow.
+        #   - Section headers     → bold yellow
+        #   - Active planet ▸     → bold yellow (the only per-row emphasis)
+        #   - Under-attack blink  → red
+        #   - Hostile incoming    → red
+        #   - Unread mail         → magenta
+        #   - Progress bar fill   → green (just so it reads as "in progress")
         #   - Metadata / coords / time → dim
+        # No green/cyan/magenta tint on plain rows.
         if self.app.current_planet_id is None:
             self._right.update("[dim]no planet[/dim]")
             return
@@ -1290,12 +1281,7 @@ class ReplScreen(Screen):
             else:
                 body.append("  ")
             body.append(f"{i}. ", style="dim")
-            # Code (identifier) cyan, name in green for current / default
-            # for others. Keeps the visual hierarchy: marker > name > code.
-            body.append(p.get("code", "—"), style="cyan")
-            body.append("#", style="dim")
-            name_style = "bold green" if is_current else "green"
-            body.append(f"{p['name']}\n", style=name_style)
+            body.append(f"{p.get('code', '—')}#{p['name']}\n", style="bold" if is_current else "")
             body.append(
                 f"     {p['galaxy']}:{p['system']}:{p['position']}  "
                 f"M {_fmt_int(p['resources_metal'])}\n",
@@ -1311,15 +1297,14 @@ class ReplScreen(Screen):
             for q in queue:
                 remaining = _remaining_str(q["finished_at"])
                 body.append(f"  #{q['id']} ", style="dim")
-                body.append(f"{q['item_key']}\n", style="green")
+                body.append(f"{q['item_key']}\n")
                 frac = _progress_fraction(q["started_at"], q["finished_at"])
                 filled, empty = _progress_bar(frac, width=12)
                 pct = round(frac * 100)
                 body.append("    ")
                 body.append(filled, style="green")
                 body.append(empty, style="dim")
-                body.append(f"  {pct:>3}%  ", style="dim")
-                body.append(f"{remaining}\n", style="green")
+                body.append(f"  {pct:>3}%  {remaining}\n", style="dim")
 
         # === 3) MISSIONS — active fleet operations ===
         body.append(
@@ -1339,10 +1324,7 @@ class ReplScreen(Screen):
                     )
                 else:
                     body.append("  ↓ ", style="dim")
-                    body.append(
-                        f"{inc['mission']} from {inc['sender_username']}\n",
-                        style="cyan",
-                    )
+                    body.append(f"{inc['mission']} from {inc['sender_username']}\n")
                 body.append(
                     f"    → {inc['target_galaxy']}:{inc['target_system']}:{inc['target_position']}  "
                     f"{_remaining_str(inc['arrival_at'])}\n",
@@ -1351,11 +1333,10 @@ class ReplScreen(Screen):
             if len(self._incoming_cache) > 5:
                 body.append(f"  +{len(self._incoming_cache) - 5} more inbound\n", style="dim")
             for f in self._fleets_cache[:5]:
-                body.append("  → ", style="cyan")
+                body.append("  → ", style="dim")
                 body.append(
                     f"{f['mission']} → "
-                    f"{f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
-                    style="cyan",
+                    f"{f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n"
                 )
                 body.append(
                     f"    {f['status']}  {_remaining_str(f['arrival_at'])}\n",
@@ -1371,10 +1352,10 @@ class ReplScreen(Screen):
             body.append(f"[{qd['done_count']}/{qd['total']}]\n", style="dim")
             cur = qd.get("current")
             if cur is None:
-                body.append("  all complete ✓\n", style="dim green")
+                body.append("  all complete ✓\n", style="dim")
             else:
                 body.append("  ▸ ", style="bold yellow")
-                body.append(f"{cur['title']}\n", style="magenta")
+                body.append(f"{cur['title']}\n")
 
         # === 5) MESSAGES ===
         body.append("\nMESSAGES ", style="bold yellow")
@@ -2548,39 +2529,31 @@ class ReplScreen(Screen):
         self._log.write("[dim]build:[/dim] [yellow]/build <ship_type> <count>[/yellow]")
 
     async def _cmd_build(self, args: list[str]) -> None:
+        """Ship production only. For buildings use /upgrade."""
         pid = self._require_planet()
         if pid is None:
             return
-        if not args:
-            self._log.write(
-                "[red]usage:[/red] /build <thing> [count]  "
-                "[dim](ship → /build small_cargo 5, building → /build robotics_factory)[/dim]"
-            )
-            return
-        key = args[0].lower()
-        # A building name forwards to /upgrade — the queue and cost model
-        # is different (single-level step, no count), so we delegate
-        # instead of trying to handle it inline.
-        if key in _BUILDING_KEYS:
-            return await self._cmd_upgrade([key])
-        if key not in _SHIP_KEYS:
-            self._log.write(
-                f"[red]unknown:[/red] {key}  "
-                "[dim](try /info "
-                f"{key}[/dim] [dim]for a hint)[/dim]"
-            )
-            return
         if len(args) < 2:
-            self._log.write("[red]usage:[/red] /build <ship> <count>")
+            self._log.write(
+                "[red]usage:[/red] /build <ship_type> <count>  "
+                "[dim](buildings? use /upgrade)[/dim]"
+            )
+            return
+        ship = args[0].lower()
+        if ship in _BUILDING_KEYS:
+            self._log.write(
+                f"[red]{ship} is a building.[/red] "
+                f"Use [yellow]/upgrade {ship}[/yellow]."
+            )
             return
         try:
             count = int(args[1])
         except ValueError:
             self._log.write("[red]count must be integer[/red]")
             return
-        r = await self.app.client.build_ship(pid, key, count)
+        r = await self.app.client.build_ship(pid, ship, count)
         self._log.write(
-            f"[green]queued[/green] {count}x {key}  "
+            f"[green]queued[/green] {count}x {ship}  "
             f"cost {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}  "
             f"done at [yellow]{_local_hhmmss(r['finished_at'])}[/yellow] "
             f"([dim]{_remaining_str(r['finished_at'])}[/dim])"
