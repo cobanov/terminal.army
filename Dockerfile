@@ -1,10 +1,10 @@
-# Space Galactic backend - production container
+# terminal.army backend — production container
 # Build:
-#   docker build -t space-galactic-backend .
+#   docker build -t terminal-army-backend .
 # Run (standalone, SQLite):
 #   docker run -p 9931:8000 -v $(pwd)/data:/data \
-#       -e DATABASE_URL="sqlite+aiosqlite:////data/ogame.db" \
-#       space-galactic-backend
+#       -e DATABASE_URL="sqlite+aiosqlite:////data/terminal-army.db" \
+#       terminal-army-backend
 # Run via docker compose (postgres + backend): docker compose up -d
 
 FROM python:3.12-slim AS base
@@ -24,8 +24,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md /app/
 
 # Stub package dirs so hatch can read metadata
-RUN mkdir -p /app/backend /app/tui/ogame_tui /app/alembic \
-    && touch /app/backend/__init__.py /app/tui/ogame_tui/__init__.py
+RUN mkdir -p /app/backend /app/tui/terminal_army /app/alembic \
+    && touch /app/backend/__init__.py /app/tui/terminal_army/__init__.py
 
 # 2. Tum kaynak kodu kopyala
 COPY backend /app/backend
@@ -43,5 +43,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)" || exit 1
 
-# ogame-server zaten DATABASE_URL env'i okur, --host/--port flag alir
-CMD ["ogame-server", "--host", "0.0.0.0", "--port", "8000"]
+# terminal-army-server reads DATABASE_URL from env, accepts --host/--port.
+CMD ["terminal-army-server", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,4 +1,6 @@
-# sakusen — ana backend + postgres
+# terminal.army — backend + postgres (internal container/db names kept as
+# "ogame*" so existing volumes mount without re-init; rename has no
+# externally visible effect since players only see the public URL).
 #
 # Calistir:
 #   docker compose up -d

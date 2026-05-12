@@ -5,9 +5,9 @@ from __future__ import annotations
 from textual.app import App
 from textual.theme import Theme
 
-from ogame_tui import options
-from ogame_tui.client import OGameClient
-from ogame_tui.screens.repl import ReplScreen
+from terminal_army import options
+from terminal_army.client import TerminalArmyClient
+from terminal_army.screens.repl import ReplScreen
 
 # Our original look: deep black background, near-black panels, amber
 # accents. Registered with Textual's theme system so /options --theme
@@ -32,12 +32,12 @@ SAKUSEN_DARK = Theme(
 )
 
 
-class OGameApp(App):
+class TerminalArmyApp(App):
     TITLE = "terminal.army"
 
     def __init__(self, base_url: str = "http://localhost:8000", token: str | None = None) -> None:
         super().__init__()
-        self.client = OGameClient(base_url=base_url, token=token)
+        self.client = TerminalArmyClient(base_url=base_url, token=token)
         self.current_planet_id: int | None = None
         self.current_universe_id: int | None = None
         self.planets: list[dict] = []

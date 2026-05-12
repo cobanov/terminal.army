@@ -12,7 +12,7 @@ class APIError(Exception):
         self.detail = detail
 
 
-class OGameClient:
+class TerminalArmyClient:
     def __init__(self, base_url: str = "http://localhost:8000", token: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=10.0)

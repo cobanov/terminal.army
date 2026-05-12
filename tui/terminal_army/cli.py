@@ -13,7 +13,7 @@ from pathlib import Path
 
 import httpx
 
-from ogame_tui import credentials as creds
+from terminal_army import credentials as creds
 
 DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "sakusen"
 LEGACY_DATA_DIR = Path.home() / ".local" / "share" / "ogame"
@@ -295,9 +295,9 @@ def main() -> None:
 
     token = _get_or_acquire_credentials(backend_url)
 
-    from ogame_tui.app import OGameApp
+    from terminal_army.app import TerminalArmyApp
 
-    app = OGameApp(base_url=backend_url, token=token)
+    app = TerminalArmyApp(base_url=backend_url, token=token)
     try:
         app.run()
     except KeyboardInterrupt:

@@ -22,8 +22,8 @@ from textual.widgets import Input, OptionList, RichLog, SelectionList, Static
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
-from ogame_tui import encyclopedia
-from ogame_tui.client import APIError
+from terminal_army import encyclopedia
+from terminal_army.client import APIError
 
 # ---------- Catalog -------------------------------------------------------
 _RESOURCE_KEYS = [
@@ -285,7 +285,7 @@ def suggestions_for(
                 if k.startswith(arg_l)
             ]
         if cmd_l == "/info":
-            from ogame_tui import encyclopedia as _enc
+            from terminal_army import encyclopedia as _enc
 
             keys = _enc.suggestions(arg_l, limit=20) if arg_l else list(_enc.ALL.keys())[:20]
             return [(f"/info {k}", _make_label(f"/info {k}", _enc.ALL[k].category)) for k in keys]
@@ -1794,7 +1794,7 @@ class ReplScreen(Screen):
           /options --theme            list available themes
           /options --theme <name>     switch theme (persists)
         """
-        from ogame_tui import options as opts
+        from terminal_army import options as opts
 
         flag_idx = next((i for i, a in enumerate(args) if a.startswith("--")), None)
         if flag_idx is None:
@@ -1835,7 +1835,7 @@ class ReplScreen(Screen):
         self._log.write(f"[red]unknown flag:[/red] {flag}  [dim]known: --theme[/dim]")
 
     async def _cmd_logout(self, args: list[str]) -> None:
-        from ogame_tui import credentials as creds
+        from terminal_army import credentials as creds
 
         creds.remove_token(self.app.client.base_url)
         self._log.write("[green]key deleted, exiting.[/green]")
