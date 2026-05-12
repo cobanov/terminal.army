@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -20,6 +20,7 @@ from backend.app.models.planet import Planet
 from backend.app.models.research import Research
 from backend.app.models.ship import PlanetShip
 from backend.app.models.universe import Universe
+from backend.app.rate_limit import limiter
 from backend.app.services.shipyard_service import queue_ship_build
 
 router = APIRouter(tags=["shipyard"])
@@ -112,7 +113,9 @@ class BuildShipResponse(BaseModel):
     response_model=BuildShipResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("60/minute")
 async def build_ship(
+    request: Request,
     planet_id: int,
     ship_type: str,
     body: BuildShipRequest,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -20,6 +20,7 @@ from backend.app.models.planet import Planet
 from backend.app.models.research import Research
 from backend.app.models.ship import PlanetDefense
 from backend.app.models.universe import Universe
+from backend.app.rate_limit import limiter
 from backend.app.services.defense_service import UNIQUE_DEFENSES, queue_defense_build
 
 router = APIRouter(tags=["defense"])
@@ -120,7 +121,9 @@ class BuildDefenseResponse(BaseModel):
     response_model=BuildDefenseResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("60/minute")
 async def build_defense(
+    request: Request,
     planet_id: int,
     defense_type: str,
     body: BuildDefenseRequest,

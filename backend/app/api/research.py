@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from backend.app.deps import CurrentUser, DBSession
 from backend.app.game.constants import TechType
 from backend.app.game.formulas import research_cost, research_time_seconds
 from backend.app.game.tech_tree import check_research_prerequisites
+from backend.app.rate_limit import limiter
 from backend.app.schemas.building import UpgradeResponse
 from backend.app.schemas.research import ResearchesResponse, ResearchRead
 from backend.app.services.research_service import (
@@ -49,7 +50,9 @@ async def list_researches(user: CurrentUser, db: DBSession) -> ResearchesRespons
     response_model=UpgradeResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("60/minute")
 async def upgrade_research(
+    request: Request,
     tech_type: str,
     planet_id: int,
     user: CurrentUser,

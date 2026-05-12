@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from backend.app.deps import CurrentUser, DBSession
@@ -10,6 +10,7 @@ from backend.app.models.building import Building
 from backend.app.models.planet import Planet
 from backend.app.models.queue import BuildQueue
 from backend.app.models.universe import Universe
+from backend.app.rate_limit import limiter
 from backend.app.schemas.building import BuildingRead, BuildingsResponse, UpgradeResponse
 from backend.app.schemas.queue import QueueItemRead
 from backend.app.services.build_service import cancel_queue_item, queue_building_upgrade
@@ -56,7 +57,9 @@ async def list_buildings(planet_id: int, user: CurrentUser, db: DBSession) -> Bu
     response_model=UpgradeResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("60/minute")
 async def upgrade_building(
+    request: Request,
     planet_id: int,
     building_type: str,
     user: CurrentUser,

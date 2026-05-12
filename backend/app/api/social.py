@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, asc, case, desc, func, or_, select
 
 from backend.app.deps import CurrentUser, DBSession
 from backend.app.models.message import Message
 from backend.app.models.user import User
+from backend.app.rate_limit import limiter
 
 router = APIRouter(tags=["social"])
 
@@ -56,7 +57,13 @@ async def list_players(user: CurrentUser, db: DBSession) -> list[PlayerRead]:
 
 
 @router.post("/messages", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
-async def send_message(body: MessageSend, user: CurrentUser, db: DBSession) -> MessageRead:
+@limiter.limit("30/minute")
+async def send_message(
+    request: Request,
+    body: MessageSend,
+    user: CurrentUser,
+    db: DBSession,
+) -> MessageRead:
     result = await db.execute(select(User).where(User.username == body.recipient_username))
     recipient = result.scalar_one_or_none()
     if recipient is None:
