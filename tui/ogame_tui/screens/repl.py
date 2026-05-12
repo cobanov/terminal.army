@@ -879,7 +879,7 @@ class ReplScreen(Screen):
     #topbar {
         height: 3;
         background: $surface;
-        border-bottom: solid $boost;
+        border-bottom: solid #525252;
     }
     #top-left {
         width: 1fr;
@@ -903,7 +903,7 @@ class ReplScreen(Screen):
     #left-panel {
         width: 24;
         background: $surface;
-        border-right: solid $boost;
+        border-right: solid #525252;
         padding: 0 1;
     }
     #center-panel {
@@ -913,13 +913,13 @@ class ReplScreen(Screen):
     #right-panel {
         width: 34;
         background: $surface;
-        border-left: solid $boost;
+        border-left: solid #525252;
         padding: 0 1;
     }
     #planet-card {
         height: 11;
         background: $background;
-        border-bottom: solid $boost;
+        border-bottom: solid #525252;
         padding: 0 1;
     }
     #log {
