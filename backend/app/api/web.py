@@ -232,6 +232,14 @@ async def signup_submit(
             status_code=303,
         )
 
+    # Reserved-username squat protection (mirrors /auth/register).
+    admin = (settings.admin_username or "").strip()
+    if admin and username.lower() == admin.lower():
+        qs = f"&code={code}" if code else ""
+        return RedirectResponse(
+            f"/signup?err=That+username+is+reserved{qs}", status_code=303
+        )
+
     existing = await db.execute(
         select(User).where(or_(User.username == username, User.email == email))
     )

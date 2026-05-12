@@ -1,20 +1,30 @@
-# terminal.army — backend + postgres (internal container/db names kept as
-# "ogame*" so existing volumes mount without re-init; rename has no
-# externally visible effect since players only see the public URL).
+# terminal.army — backend + postgres
 #
-# Calistir:
+# Internal container/db names kept as "ogame*" so existing volumes mount
+# without re-init; the rename has no externally visible effect since
+# players only see the public URL.
+#
+# Run:
 #   docker compose up -d
 #
-# Loglar:
+# Logs:
 #   docker compose logs -f backend
 #
 # Health:
 #   curl http://localhost:9931/health
 #
-# Ortam degiskenleri (.env veya shell'den):
-#   JWT_SECRET           - prod'da rastgele uretip sabit tut
-#   DEFAULT_UNIVERSE_NAME, DEFAULT_UNIVERSE_SPEED - opsiyonel
-#   HOST_PORT            - dis erisim portu (default 9931)
+# Required env (in .env at the repo root):
+#   ENV=prod                                  # locks down assert_production_safe
+#   POSTGRES_PASSWORD=<openssl rand -hex 24>
+#   JWT_SECRET=<openssl rand -hex 32>
+#   ADMIN_USERNAME=<your operator username>
+#   CORS_ORIGINS=https://terminal.army
+#
+# Optional:
+#   HOST_BIND=127.0.0.1   # default; set 0.0.0.0 only if no reverse proxy
+#   HOST_PORT=9931
+#   SERVER_NAME=s1
+#   DEFAULT_UNIVERSE_SPEED=1
 
 services:
   postgres:
@@ -22,8 +32,9 @@ services:
     container_name: ogame-postgres
     environment:
       POSTGRES_USER: ogame
-      POSTGRES_PASSWORD: ogame
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (openssl rand -hex 24)}
       POSTGRES_DB: ogame
+      TZ: UTC
     volumes:
       - ogame-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,33 +43,53 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-    image: space-galactic-backend:latest
+    image: terminal-army-backend:latest
     container_name: ogame-backend
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://ogame:ogame@postgres:5432/ogame
-      JWT_SECRET: ${JWT_SECRET:-change-me-prod-please-generate-something-random}
+      ENV: ${ENV:-dev}
+      DATABASE_URL: postgresql+asyncpg://ogame:${POSTGRES_PASSWORD}@postgres:5432/ogame
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
       DEFAULT_UNIVERSE_NAME: ${DEFAULT_UNIVERSE_NAME:-Galactica}
       DEFAULT_UNIVERSE_SPEED: ${DEFAULT_UNIVERSE_SPEED:-1}
       SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-5}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://terminal.army}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
-      # Server identity
       SERVER_NAME: ${SERVER_NAME:-s1}
       SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-the first universe}
       SERVER_MAX_USERS: ${SERVER_MAX_USERS:-5000}
+      TZ: UTC
     ports:
-      - "${HOST_PORT:-9931}:8000"
+      # Bind to loopback only by default — terminal.army terminates TLS at
+      # Cloudflare Tunnel / Caddy on the same host, so the raw FastAPI app
+      # should not be reachable from the public internet.
+      - "${HOST_BIND:-127.0.0.1}:${HOST_PORT:-9931}:8000"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   ogame-pgdata:

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import or_, select
 
+from backend.app.config import get_settings
 from backend.app.deps import CurrentUser, DBSession
 from backend.app.models.user import User
 from backend.app.rate_limit import limiter
@@ -27,6 +28,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 )
 @limiter.limit("5/minute")
 async def register(request: Request, body: RegisterRequest, db: DBSession) -> UserPublic:
+    # ADMIN_USERNAME is reserved against squatting. Whoever the operator
+    # is, they pre-seed their own account from the host (see
+    # docs/DEPLOY.md "Create the admin user"); /register refuses to
+    # hand the operator's username to anyone else.
+    admin = (get_settings().admin_username or "").strip()
+    if admin and body.username.lower() == admin.lower():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="that username is reserved by the operator",
+        )
+
     existing = await db.execute(
         select(User).where(or_(User.username == body.username, User.email == body.email))
     )
