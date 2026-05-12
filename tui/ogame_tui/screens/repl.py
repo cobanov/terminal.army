@@ -133,8 +133,12 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/alliances", "/alliances", "list alliances"),
     CommandSpec("/alliance", "/alliance [tag]", "alliance detail or your own"),
     CommandSpec("/found ", "/found <tag> <name>", "found a new alliance"),
-    CommandSpec("/join ", "/join <tag>", "join an alliance"),
+    CommandSpec("/join ", "/join <tag> [msg]", "apply to join an alliance"),
     CommandSpec("/leave", "/leave", "leave your alliance"),
+    CommandSpec("/requests", "/requests", "pending join requests (or yours)"),
+    CommandSpec("/approve ", "/approve <user>", "founder: approve a join request"),
+    CommandSpec("/reject ", "/reject <user>", "founder: reject a join request"),
+    CommandSpec("/withdraw", "/withdraw", "withdraw your own join request"),
     CommandSpec("/me", "/me", "show my account"),
     CommandSpec("/refresh", "/refresh", "force refresh"),
     CommandSpec("/clear", "/clear", "clear log"),
@@ -189,8 +193,12 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
   /alliance               your alliance detail
   /alliance <tag>         alliance detail by tag
   /found <tag> <name>     found a new alliance (tag 2-6 chars)
-  /join <tag>             join an alliance
+  /join <tag> [message]   apply to join — the founder must approve
   /leave                  leave your alliance (founder must dissolve)
+  /requests               founder: list pending applicants. else: your pending
+  /approve <user>         founder: approve a join request
+  /reject <user>          founder: reject a join request
+  /withdraw               withdraw your own pending join request
 
 [bold]system[/bold]
   /me                     my account info
@@ -399,7 +407,18 @@ def _nav_text() -> Text:
         ),
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", ["/msg", "/inbox", "/players"]),
-        ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
+        (
+            "STANDINGS",
+            [
+                "/leaderboard",
+                "/alliances",
+                "/alliance",
+                "/requests",
+                "/approve",
+                "/reject",
+                "/withdraw",
+            ],
+        ),
         ("HELP", ["/help"]),
     ]
     t = Text()
@@ -542,6 +561,7 @@ class ReplScreen(Screen):
         self._tech_levels_cache: dict[str, int] = {}
         self._max_lab_level: int = 0
         self._players_cache: list[str] = []  # usernames for autocomplete
+        self._cached_user_id: int | None = None
         # Command history (arrow-up/down + autosuggest source)
         self._history: list[str] = []
         self._history_pos: int = 0  # cursor; len == "no current entry"
@@ -1000,6 +1020,10 @@ class ReplScreen(Screen):
             "rank": "leaderboard",
             "ranking": "leaderboard",
             "ally": "alliance",
+            "req": "requests", "reqs": "requests",
+            "app": "approve", "approval": "approve",
+            "rej": "reject",
+            "wd": "withdraw",
             "all": "alliances",
         }
         cmd = aliases.get(cmd, cmd)
@@ -1022,10 +1046,17 @@ class ReplScreen(Screen):
 
     async def _cmd_me(self, args: list[str]) -> None:
         me = await self.app.client.me()
+        self._cached_user_id = int(me["id"])
         self._log.write(
             f"[bold]{me['username']}[/bold] [dim]<{me['email']}>[/dim] "
             f"universe={me.get('current_universe_id')}"
         )
+
+    async def _me_user_id(self) -> int:
+        if self._cached_user_id is None:
+            me = await self.app.client.me()
+            self._cached_user_id = int(me["id"])
+        return self._cached_user_id
 
     async def _cmd_logout(self, args: list[str]) -> None:
         from ogame_tui import credentials as creds
@@ -1493,16 +1524,97 @@ class ReplScreen(Screen):
 
     async def _cmd_join(self, args: list[str]) -> None:
         if not args:
-            self._log.write("[red]usage:[/red] /join <tag>")
+            self._log.write("[red]usage:[/red] /join <tag> [message]")
             return
+        tag = args[0]
+        message = " ".join(args[1:]) if len(args) > 1 else ""
         try:
-            data = await self.app.client.join_alliance(args[0])
+            data = await self.app.client.join_alliance(tag, message=message)
         except APIError as exc:
             self._log.write(f"[red]{exc.detail}[/red]")
             return
         self._log.write(
-            f"[green]joined[/green] [bold yellow][{data['tag']}][/bold yellow] {data['name']}"
+            f"[green]request sent[/green] to [bold yellow][{data['alliance_tag']}][/bold yellow] "
+            f"{data['alliance_name']} — wait for the founder to approve"
         )
+
+    async def _cmd_requests(self, args: list[str]) -> None:
+        """Founder: list pending applications. Member: show your own request."""
+        my = await self.app.client.my_alliance()
+        if my is not None and my["founder_id"] == await self._me_user_id():
+            try:
+                items = await self.app.client.list_alliance_requests(my["tag"])
+            except APIError as exc:
+                self._log.write(f"[red]{exc.detail}[/red]")
+                return
+            if not items:
+                self._log.write("[dim]no pending applications[/dim]")
+                return
+            t = Table(show_header=True, header_style="bold yellow", box=None)
+            t.add_column("applicant", style="bold")
+            t.add_column("message")
+            t.add_column("applied")
+            for r in items:
+                t.add_row(
+                    r["username"],
+                    r.get("message") or "—",
+                    _local_hhmmss(r["created_at"]),
+                )
+            self._log.write(t)
+            self._log.write(
+                "[dim]approve:[/dim] [yellow]/approve <username>[/yellow]  "
+                "[dim]reject:[/dim] [yellow]/reject <username>[/yellow]"
+            )
+            return
+
+        # Not a founder — show my own pending request if any.
+        mine = await self.app.client.my_alliance_request()
+        if mine is None:
+            self._log.write("[dim]no pending request[/dim]")
+            return
+        self._log.write(
+            f"[yellow]pending[/yellow] [{mine['alliance_tag']}] {mine['alliance_name']} "
+            f"[dim](applied {_local_hhmmss(mine['created_at'])})[/dim]  "
+            f"[dim]withdraw:[/dim] [yellow]/withdraw[/yellow]"
+        )
+
+    async def _cmd_approve(self, args: list[str]) -> None:
+        if not args:
+            self._log.write("[red]usage:[/red] /approve <username>")
+            return
+        my = await self.app.client.my_alliance()
+        if my is None or my["founder_id"] != await self._me_user_id():
+            self._log.write("[red]only the founder can approve requests[/red]")
+            return
+        try:
+            await self.app.client.approve_alliance_request(my["tag"], args[0])
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write(f"[green]approved[/green] {args[0]} into [{my['tag']}]")
+
+    async def _cmd_reject(self, args: list[str]) -> None:
+        if not args:
+            self._log.write("[red]usage:[/red] /reject <username>")
+            return
+        my = await self.app.client.my_alliance()
+        if my is None or my["founder_id"] != await self._me_user_id():
+            self._log.write("[red]only the founder can reject requests[/red]")
+            return
+        try:
+            await self.app.client.reject_alliance_request(my["tag"], args[0])
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write(f"[yellow]rejected[/yellow] {args[0]}")
+
+    async def _cmd_withdraw(self, args: list[str]) -> None:
+        try:
+            await self.app.client.withdraw_alliance_request()
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write("[green]request withdrawn[/green]")
 
     async def _cmd_leave(self, args: list[str]) -> None:
         my = await self.app.client.my_alliance()

@@ -58,3 +58,31 @@ class AllianceMember(Base):
     )
 
     alliance: Mapped[Alliance] = relationship(back_populates="members")
+
+
+class AllianceJoinRequest(Base):
+    """Pending application to join an alliance.
+
+    A user POSTs /alliances/{tag}/join to create one. The founder
+    approves (becomes an AllianceMember) or rejects (row deleted).
+    UNIQUE(alliance_id, user_id) prevents duplicate pending applications
+    for the same target; a separate guard rejects requests from users
+    who already hold a membership somewhere.
+    """
+
+    __tablename__ = "alliance_join_requests"
+    __table_args__ = (
+        UniqueConstraint("alliance_id", "user_id", name="uq_alliance_join_request_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    alliance_id: Mapped[int] = mapped_column(
+        ForeignKey("alliances.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )

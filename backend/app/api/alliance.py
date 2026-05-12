@@ -1,12 +1,17 @@
 """Alliance JSON API (for the TUI client).
 
 Endpoints:
-    GET    /alliances                  list with member counts
-    POST   /alliances                  create (body: tag, name, description)
-    GET    /alliances/{tag}            detail + members
-    POST   /alliances/{tag}/join       join (must not be in another)
-    POST   /alliances/{tag}/leave      leave (founder cannot leave if others remain)
-    GET    /me/alliance                my alliance (or 404)
+    GET    /alliances                          list with member counts
+    POST   /alliances                          create (body: tag, name, description)
+    GET    /alliances/{tag}                    detail + members
+    POST   /alliances/{tag}/join               apply (creates a pending request)
+    POST   /alliances/{tag}/leave              leave (founder dissolves alliance)
+    GET    /alliances/{tag}/requests           founder only: list pending applicants
+    POST   /alliances/{tag}/requests/{username}/approve   founder approves
+    POST   /alliances/{tag}/requests/{username}/reject    founder rejects
+    DELETE /me/alliance-request                withdraw my own pending request
+    GET    /me/alliance-request                inspect my pending request
+    GET    /me/alliance                        my alliance (or null)
 """
 
 from __future__ import annotations
@@ -20,7 +25,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.deps import CurrentUser, DBSession
-from backend.app.models.alliance import Alliance, AllianceMember, AllianceRole
+from backend.app.models.alliance import (
+    Alliance,
+    AllianceJoinRequest,
+    AllianceMember,
+    AllianceRole,
+)
 from backend.app.models.user import User
 
 router = APIRouter(tags=["alliance"])
@@ -141,16 +151,197 @@ async def get_alliance(tag: str, _user: CurrentUser, db: DBSession) -> AllianceD
     return AllianceDetail(**base.model_dump(), members=members)
 
 
-@router.post("/alliances/{tag}/join", response_model=AllianceRead)
-async def join_alliance(tag: str, user: CurrentUser, db: DBSession) -> AllianceRead:
+class JoinRequestBody(BaseModel):
+    message: str = Field(default="", max_length=500)
+
+
+class JoinRequestRead(BaseModel):
+    alliance_id: int
+    alliance_tag: str
+    alliance_name: str
+    user_id: int
+    username: str
+    message: str
+    created_at: datetime
+
+
+@router.post(
+    "/alliances/{tag}/join",
+    response_model=JoinRequestRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_join_alliance(
+    tag: str,
+    user: CurrentUser,
+    db: DBSession,
+    body: JoinRequestBody | None = None,
+) -> JoinRequestRead:
+    """Submit a join request. The founder must approve before membership."""
     existing_m = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user.id))
     if existing_m.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="leave your current alliance first")
 
+    # One pending request at a time across all alliances.
+    existing_r = await db.execute(
+        select(AllianceJoinRequest).where(AllianceJoinRequest.user_id == user.id)
+    )
+    if existing_r.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="you already have a pending alliance request — withdraw it first",
+        )
+
     a = await _alliance_by_tag(db, tag)
-    db.add(AllianceMember(alliance_id=a.id, user_id=user.id, role=AllianceRole.MEMBER.value))
+    req = AllianceJoinRequest(
+        alliance_id=a.id,
+        user_id=user.id,
+        message=(body.message if body else ""),
+    )
+    db.add(req)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409, detail="request already pending for this alliance"
+        ) from exc
+    await db.refresh(req)
+    return JoinRequestRead(
+        alliance_id=a.id,
+        alliance_tag=a.tag,
+        alliance_name=a.name,
+        user_id=user.id,
+        username=user.username,
+        message=req.message,
+        created_at=req.created_at,
+    )
+
+
+@router.get("/alliances/{tag}/requests", response_model=list[JoinRequestRead])
+async def list_join_requests(
+    tag: str, user: CurrentUser, db: DBSession
+) -> list[JoinRequestRead]:
+    """Founder-only: list pending applicants for the alliance."""
+    a = await _alliance_by_tag(db, tag)
+    if a.founder_id != user.id:
+        raise HTTPException(status_code=403, detail="only the founder can view requests")
+
+    res = await db.execute(
+        select(AllianceJoinRequest, User)
+        .join(User, User.id == AllianceJoinRequest.user_id)
+        .where(AllianceJoinRequest.alliance_id == a.id)
+        .order_by(AllianceJoinRequest.created_at)
+    )
+    return [
+        JoinRequestRead(
+            alliance_id=a.id,
+            alliance_tag=a.tag,
+            alliance_name=a.name,
+            user_id=u.id,
+            username=u.username,
+            message=r.message,
+            created_at=r.created_at,
+        )
+        for r, u in res.all()
+    ]
+
+
+async def _founder_request(
+    db: AsyncSession, tag: str, founder: User, username: str
+) -> tuple[Alliance, AllianceJoinRequest, User]:
+    a = await _alliance_by_tag(db, tag)
+    if a.founder_id != founder.id:
+        raise HTTPException(status_code=403, detail="only the founder can decide requests")
+    u_res = await db.execute(select(User).where(User.username == username))
+    applicant = u_res.scalar_one_or_none()
+    if applicant is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    r_res = await db.execute(
+        select(AllianceJoinRequest).where(
+            AllianceJoinRequest.alliance_id == a.id,
+            AllianceJoinRequest.user_id == applicant.id,
+        )
+    )
+    req = r_res.scalar_one_or_none()
+    if req is None:
+        raise HTTPException(status_code=404, detail="no pending request from that user")
+    return a, req, applicant
+
+
+@router.post("/alliances/{tag}/requests/{username}/approve", response_model=AllianceRead)
+async def approve_join_request(
+    tag: str, username: str, user: CurrentUser, db: DBSession
+) -> AllianceRead:
+    a, req, applicant = await _founder_request(db, tag, user, username)
+
+    # If the applicant joined some other alliance after applying, reject quietly.
+    in_other = await db.execute(
+        select(AllianceMember).where(AllianceMember.user_id == applicant.id)
+    )
+    if in_other.scalar_one_or_none() is not None:
+        await db.delete(req)
+        await db.commit()
+        raise HTTPException(
+            status_code=409, detail=f"{username} already belongs to an alliance"
+        )
+
+    db.add(
+        AllianceMember(
+            alliance_id=a.id, user_id=applicant.id, role=AllianceRole.MEMBER.value
+        )
+    )
+    await db.delete(req)
     await db.commit()
     return await _row_to_read(db, a)
+
+
+@router.post("/alliances/{tag}/requests/{username}/reject")
+async def reject_join_request(
+    tag: str, username: str, user: CurrentUser, db: DBSession
+) -> dict[str, bool]:
+    _, req, _ = await _founder_request(db, tag, user, username)
+    await db.delete(req)
+    await db.commit()
+    return {"rejected": True}
+
+
+@router.get("/me/alliance-request", response_model=JoinRequestRead | None)
+async def my_alliance_request(
+    user: CurrentUser, db: DBSession
+) -> JoinRequestRead | None:
+    res = await db.execute(
+        select(AllianceJoinRequest, Alliance)
+        .join(Alliance, Alliance.id == AllianceJoinRequest.alliance_id)
+        .where(AllianceJoinRequest.user_id == user.id)
+    )
+    row = res.one_or_none()
+    if row is None:
+        return None
+    req, a = row
+    return JoinRequestRead(
+        alliance_id=a.id,
+        alliance_tag=a.tag,
+        alliance_name=a.name,
+        user_id=user.id,
+        username=user.username,
+        message=req.message,
+        created_at=req.created_at,
+    )
+
+
+@router.delete("/me/alliance-request")
+async def withdraw_alliance_request(
+    user: CurrentUser, db: DBSession
+) -> dict[str, bool]:
+    res = await db.execute(
+        select(AllianceJoinRequest).where(AllianceJoinRequest.user_id == user.id)
+    )
+    req = res.scalar_one_or_none()
+    if req is None:
+        raise HTTPException(status_code=404, detail="no pending request")
+    await db.delete(req)
+    await db.commit()
+    return {"withdrawn": True}
 
 
 @router.post("/alliances/{tag}/leave")

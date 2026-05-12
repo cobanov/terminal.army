@@ -224,8 +224,31 @@ class OGameClient:
             json={"tag": tag, "name": name, "description": description},
         )
 
-    async def join_alliance(self, tag: str) -> dict[str, Any]:
-        return await self._request("POST", f"/api/alliances/{tag}/join")
+    async def join_alliance(self, tag: str, message: str = "") -> dict[str, Any]:
+        """Submit a join request. Founder must approve before membership."""
+        return await self._request(
+            "POST", f"/api/alliances/{tag}/join", json={"message": message}
+        )
+
+    async def list_alliance_requests(self, tag: str) -> list[dict[str, Any]]:
+        return await self._request("GET", f"/api/alliances/{tag}/requests")
+
+    async def approve_alliance_request(self, tag: str, username: str) -> dict[str, Any]:
+        return await self._request(
+            "POST", f"/api/alliances/{tag}/requests/{username}/approve"
+        )
+
+    async def reject_alliance_request(self, tag: str, username: str) -> dict[str, Any]:
+        return await self._request(
+            "POST", f"/api/alliances/{tag}/requests/{username}/reject"
+        )
+
+    async def my_alliance_request(self) -> dict[str, Any] | None:
+        # 200 + null when no pending request.
+        return await self._request("GET", "/api/me/alliance-request")
+
+    async def withdraw_alliance_request(self) -> dict[str, Any]:
+        return await self._request("DELETE", "/api/me/alliance-request")
 
     async def leave_alliance(self, tag: str) -> dict[str, Any]:
         return await self._request("POST", f"/api/alliances/{tag}/leave")

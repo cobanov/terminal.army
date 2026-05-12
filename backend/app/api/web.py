@@ -25,7 +25,12 @@ from backend.app.game.constants import (
     BuildingType,
     DefenseType,
 )
-from backend.app.models.alliance import Alliance, AllianceMember, AllianceRole
+from backend.app.models.alliance import (
+    Alliance,
+    AllianceJoinRequest,
+    AllianceMember,
+    AllianceRole,
+)
 from backend.app.models.building import Building
 from backend.app.models.message import Message
 from backend.app.models.planet import Planet
@@ -620,6 +625,8 @@ async def alliance_detail_page(
     request: Request,
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    err: str | None = None,
+    ok: str | None = None,
 ) -> Response:
     user = await _user_from_cookie(ogame_token, db)
     if user is None:
@@ -633,6 +640,7 @@ async def alliance_detail_page(
     founder = await db.get(User, a.founder_id)
     my_alliance = await _alliance_for_user(db, user.id)
     is_member = my_alliance is not None and my_alliance.id == a.id
+    is_founder = a.founder_id == user.id
 
     m_res = await db.execute(
         select(AllianceMember, User)
@@ -654,6 +662,33 @@ async def alliance_detail_page(
             }
         )
 
+    # Has the viewer already applied to THIS alliance?
+    my_req_res = await db.execute(
+        select(AllianceJoinRequest).where(
+            AllianceJoinRequest.user_id == user.id,
+            AllianceJoinRequest.alliance_id == a.id,
+        )
+    )
+    my_pending_for_this = my_req_res.scalar_one_or_none() is not None
+
+    # Founder-only: pending applicants.
+    pending: list[dict] = []
+    if is_founder:
+        p_res = await db.execute(
+            select(AllianceJoinRequest, User)
+            .join(User, User.id == AllianceJoinRequest.user_id)
+            .where(AllianceJoinRequest.alliance_id == a.id)
+            .order_by(AllianceJoinRequest.created_at)
+        )
+        for r, u in p_res.all():
+            pending.append(
+                {
+                    "username": u.username,
+                    "message": r.message,
+                    "created_at": r.created_at,
+                }
+            )
+
     return templates.TemplateResponse(
         name="alliance_detail.html",
         request=request,
@@ -664,7 +699,12 @@ async def alliance_detail_page(
             "founder_username": founder.username if founder else "?",
             "my_alliance": my_alliance,
             "is_member": is_member,
+            "is_founder": is_founder,
+            "my_pending_for_this": my_pending_for_this,
+            "pending": pending,
             "server_name": get_settings().server_name,
+            "err": err,
+            "ok": ok,
         },
     )
 
@@ -683,14 +723,144 @@ async def alliance_join_form(
     if existing_m.scalar_one_or_none() is not None:
         return RedirectResponse("/alliances?err=Leave+your+current+alliance+first", status_code=303)
 
+    existing_r = await db.execute(
+        select(AllianceJoinRequest).where(AllianceJoinRequest.user_id == user.id)
+    )
+    if existing_r.scalar_one_or_none() is not None:
+        return RedirectResponse(
+            "/alliances?err=You+already+have+a+pending+request+(withdraw+it+first)",
+            status_code=303,
+        )
+
     a_res = await db.execute(select(Alliance).where(Alliance.tag == tag.upper()))
     a = a_res.scalar_one_or_none()
     if a is None:
         return RedirectResponse("/alliances?err=Alliance+not+found", status_code=303)
 
-    db.add(AllianceMember(alliance_id=a.id, user_id=user.id, role=AllianceRole.MEMBER.value))
+    db.add(AllianceJoinRequest(alliance_id=a.id, user_id=user.id))
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        return RedirectResponse(
+            f"/alliances/{a.tag}?err=Request+already+pending", status_code=303
+        )
+    return RedirectResponse(
+        f"/alliances/{a.tag}?ok=Join+request+sent.+Wait+for+the+founder+to+approve.",
+        status_code=303,
+    )
+
+
+@router.post("/alliances/{tag}/requests/{username}/approve")
+async def alliance_request_approve_form(
+    tag: str,
+    username: str,
+    db: DBSession,
+    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _user_from_cookie(ogame_token, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=302)
+
+    a_res = await db.execute(select(Alliance).where(Alliance.tag == tag.upper()))
+    a = a_res.scalar_one_or_none()
+    if a is None or a.founder_id != user.id:
+        return RedirectResponse("/alliances?err=Not+authorized", status_code=303)
+
+    u_res = await db.execute(select(User).where(User.username == username))
+    applicant = u_res.scalar_one_or_none()
+    if applicant is None:
+        return RedirectResponse(f"/alliances/{a.tag}?err=User+not+found", status_code=303)
+
+    r_res = await db.execute(
+        select(AllianceJoinRequest).where(
+            AllianceJoinRequest.alliance_id == a.id,
+            AllianceJoinRequest.user_id == applicant.id,
+        )
+    )
+    req = r_res.scalar_one_or_none()
+    if req is None:
+        return RedirectResponse(f"/alliances/{a.tag}?err=No+pending+request", status_code=303)
+
+    # If applicant joined elsewhere meanwhile, drop the stale request.
+    in_other = await db.execute(
+        select(AllianceMember).where(AllianceMember.user_id == applicant.id)
+    )
+    if in_other.scalar_one_or_none() is not None:
+        await db.delete(req)
+        await db.commit()
+        return RedirectResponse(
+            f"/alliances/{a.tag}?err={username}+is+already+in+an+alliance",
+            status_code=303,
+        )
+
+    db.add(
+        AllianceMember(
+            alliance_id=a.id, user_id=applicant.id, role=AllianceRole.MEMBER.value
+        )
+    )
+    await db.delete(req)
     await db.commit()
-    return RedirectResponse(f"/alliances/{a.tag}", status_code=303)
+    return RedirectResponse(
+        f"/alliances/{a.tag}?ok={username}+approved", status_code=303
+    )
+
+
+@router.post("/alliances/{tag}/requests/{username}/reject")
+async def alliance_request_reject_form(
+    tag: str,
+    username: str,
+    db: DBSession,
+    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _user_from_cookie(ogame_token, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=302)
+    a_res = await db.execute(select(Alliance).where(Alliance.tag == tag.upper()))
+    a = a_res.scalar_one_or_none()
+    if a is None or a.founder_id != user.id:
+        return RedirectResponse("/alliances?err=Not+authorized", status_code=303)
+    u_res = await db.execute(select(User).where(User.username == username))
+    applicant = u_res.scalar_one_or_none()
+    if applicant is None:
+        return RedirectResponse(f"/alliances/{a.tag}?err=User+not+found", status_code=303)
+    await db.execute(
+        select(AllianceJoinRequest).where(
+            AllianceJoinRequest.alliance_id == a.id,
+            AllianceJoinRequest.user_id == applicant.id,
+        )
+    )
+    r_res = await db.execute(
+        select(AllianceJoinRequest).where(
+            AllianceJoinRequest.alliance_id == a.id,
+            AllianceJoinRequest.user_id == applicant.id,
+        )
+    )
+    req = r_res.scalar_one_or_none()
+    if req is not None:
+        await db.delete(req)
+        await db.commit()
+    return RedirectResponse(
+        f"/alliances/{a.tag}?ok={username}+rejected", status_code=303
+    )
+
+
+@router.post("/alliances/withdraw-request")
+async def alliance_request_withdraw_form(
+    db: DBSession,
+    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+) -> Response:
+    user = await _user_from_cookie(ogame_token, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=302)
+    res = await db.execute(
+        select(AllianceJoinRequest).where(AllianceJoinRequest.user_id == user.id)
+    )
+    req = res.scalar_one_or_none()
+    if req is not None:
+        await db.delete(req)
+        await db.commit()
+    return RedirectResponse("/alliances?ok=Request+withdrawn", status_code=303)
 
 
 @router.post("/alliances/{tag}/leave")

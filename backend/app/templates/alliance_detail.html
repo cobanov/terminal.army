@@ -11,6 +11,8 @@
   </h2>
   <p>{{ alliance.description or "(no description set)" }}</p>
   <p class="hint">Founder: <b>{{ founder_username }}</b></p>
+  {% if err %}<div class="err" style="margin-top:1rem;">{{ err }}</div>{% endif %}
+  {% if ok %}<div class="ok-banner" style="margin-top:1rem;">{{ ok }}</div>{% endif %}
   {% if is_member %}
     <p style="margin-top:1rem;">
       <form action="/alliances/{{ alliance.tag }}/leave" method="post" style="display:inline;">
@@ -19,14 +21,53 @@
         </button>
       </form>
     </p>
+  {% elif my_pending_for_this %}
+    <p style="margin-top:1rem;" class="hint">
+      Your join request is pending the founder's review.
+      <form action="/alliances/withdraw-request" method="post" style="display:inline; margin-left:0.6rem;">
+        <button type="submit" class="ghost" style="width:auto; padding:0.3rem 0.8rem;">Withdraw request</button>
+      </form>
+    </p>
   {% elif not my_alliance %}
     <p style="margin-top:1rem;">
       <form action="/alliances/{{ alliance.tag }}/join" method="post" style="display:inline;">
-        <button type="submit" style="width:auto; padding:0.4rem 1rem;">Join this alliance &rarr;</button>
+        <button type="submit" style="width:auto; padding:0.4rem 1rem;">Request to join &rarr;</button>
       </form>
+      <span class="hint" style="margin-left:0.6rem;">The founder must approve.</span>
     </p>
   {% endif %}
 </div>
+
+{% if is_founder and pending %}
+<div class="card">
+  <h2 class="card-title">Pending applications <small>{{ pending|length }} waiting</small></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>applicant</th>
+        <th>applied</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pending %}
+      <tr>
+        <td><b>{{ p.username }}</b>{% if p.message %} <span class="dim">— {{ p.message }}</span>{% endif %}</td>
+        <td class="dim">{{ p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else "?" }}</td>
+        <td class="right">
+          <form action="/alliances/{{ alliance.tag }}/requests/{{ p.username }}/approve" method="post" style="display:inline;">
+            <button type="submit" style="width:auto; padding:0.3rem 0.8rem;">approve</button>
+          </form>
+          <form action="/alliances/{{ alliance.tag }}/requests/{{ p.username }}/reject" method="post" style="display:inline; margin-left:0.4rem;">
+            <button type="submit" class="ghost" style="width:auto; padding:0.3rem 0.8rem; color:#ef4444; border-color:#ef4444;">reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 <div class="card">
   <h2 class="card-title">Roster <small>{{ members|length }} members</small></h2>
