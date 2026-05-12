@@ -336,6 +336,7 @@ def suggestions_for(
             stripped = arg.split()
             if stripped and stripped[0] in ("--theme", "--t"):
                 themes = [
+                    "sakusen-dark",
                     "textual-dark",
                     "textual-light",
                     "nord",

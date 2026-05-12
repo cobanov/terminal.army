@@ -12,14 +12,15 @@ from typing import Any
 
 DEFAULT_PATH = Path.home() / ".config" / "sakusen" / "options.json"
 
-DEFAULT_THEME = "textual-dark"
+DEFAULT_THEME = "sakusen-dark"
 
 # Friendly aliases that map to Textual's built-in theme names. Anything the
 # user types that doesn't appear here is passed through verbatim so any new
 # upstream theme works without a code change.
 THEME_ALIASES = {
     "darcula": "dracula",  # JetBrains Darcula → close match
-    "default": "textual-dark",
+    "default": "sakusen-dark",
+    "sakusen": "sakusen-dark",
     "dark": "textual-dark",
     "light": "textual-light",
 }

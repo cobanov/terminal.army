@@ -3,10 +3,30 @@
 from __future__ import annotations
 
 from textual.app import App
+from textual.theme import Theme
 
 from ogame_tui import options
 from ogame_tui.client import OGameClient
 from ogame_tui.screens.repl import ReplScreen
+
+# Our original look: deep black background, near-black panels, amber
+# accents. Registered with Textual's theme system so /options --theme
+# treats it like any other built-in.
+SAKUSEN_DARK = Theme(
+    name="sakusen-dark",
+    primary="#fbbf24",
+    secondary="#84cc16",
+    accent="#fbbf24",
+    warning="#fbbf24",
+    error="#ef4444",
+    success="#84cc16",
+    background="#000000",
+    surface="#0a0a0a",
+    panel="#0a0a0a",
+    boost="#262626",
+    foreground="#d4d4d4",
+    dark=True,
+)
 
 
 class OGameApp(App):
@@ -19,8 +39,14 @@ class OGameApp(App):
         self.current_universe_id: int | None = None
         self.planets: list[dict] = []
         self.me_info: dict | None = None
-        # Persisted theme is applied as soon as the app boots so users
-        # don't see a flash of the default theme.
+        # Register our default theme before applying any saved preference.
+        # If the user has never run /options --theme this picks the
+        # sakusen palette; otherwise their saved name (built-in or ours)
+        # is restored.
+        try:
+            self.register_theme(SAKUSEN_DARK)
+        except Exception:
+            pass
         saved_theme = options.get_theme()
         try:
             self.theme = saved_theme
