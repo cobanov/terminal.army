@@ -42,9 +42,7 @@ def online_count(now: datetime | None = None) -> int:
     return sum(1 for seen in _last_seen.values() if seen >= cutoff)
 
 
-def active_count(
-    window: timedelta = ACTIVE_WINDOW, now: datetime | None = None
-) -> int:
+def active_count(window: timedelta = ACTIVE_WINDOW, now: datetime | None = None) -> int:
     """Count users seen within the given window. Default: 24h."""
     now = now or datetime.now(UTC)
     _gc(now)
