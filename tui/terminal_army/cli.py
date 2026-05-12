@@ -229,28 +229,74 @@ _PACKAGE_NAME = "terminal-army"
 
 
 def _self_uninstall() -> int:
-    """Remove the CLI via `uv tool uninstall`.
+    """Fully remove the CLI: binaries, saved keys, and any solo-mode data.
 
-    Mirrors --update: assumes the user installed with `uv tool install`,
-    which is what every install path in the README points at. The local
-    credential cache (~/.config/tarmy or legacy ~/.local/share/sakusen)
-    is left alone on purpose so re-installing keeps you signed in.
+    Steps:
+      1. Show what will be deleted and prompt for confirmation.
+      2. Delete credential dirs (~/.config/sakusen + legacy ~/.config/ogame).
+      3. Delete solo data dirs (~/.local/share/sakusen + legacy ~/.local/share/ogame).
+      4. Run `uv tool uninstall terminal-army` to remove the binaries.
+
+    Each step is best-effort. If `uv` isn't on PATH we still wipe the user
+    data so people can rm-rf their way out without uv installed.
     """
     import shutil
     import subprocess
 
+    # Everything we know about that tarmy may have created on disk.
+    data_paths = [
+        Path.home() / ".config" / "sakusen",
+        Path.home() / ".config" / "ogame",
+        Path.home() / ".local" / "share" / "sakusen",
+        Path.home() / ".local" / "share" / "ogame",
+    ]
+    existing = [p for p in data_paths if p.exists()]
+
+    print(
+        _color("This will permanently remove tarmy from your machine:", ANSI_BOLD), file=sys.stderr
+    )
+    print(file=sys.stderr)
+    print(_color("  - the tarmy and tarmy-server commands", ANSI_DIM), file=sys.stderr)
+    if existing:
+        print(_color("  - saved login keys and solo-mode data:", ANSI_DIM), file=sys.stderr)
+        for p in existing:
+            print(_color(f"      {p}", ANSI_DIM), file=sys.stderr)
+    else:
+        print(_color("  - (no saved keys or solo data found)", ANSI_DIM), file=sys.stderr)
+    print(file=sys.stderr)
+
+    try:
+        answer = input("Type 'yes' to confirm: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print(file=sys.stderr)
+        print(_color("aborted", ANSI_YELLOW), file=sys.stderr)
+        return 1
+    if answer != "yes":
+        print(_color("aborted", ANSI_YELLOW), file=sys.stderr)
+        return 1
+
+    # 1. Wipe user data first so even a failing uv step leaves a clean home.
+    for p in existing:
+        try:
+            shutil.rmtree(p)
+            print(_color(f"  removed {p}", ANSI_DIM), file=sys.stderr)
+        except OSError as exc:
+            print(_color(f"  could not remove {p}: {exc}", ANSI_YELLOW), file=sys.stderr)
+
+    # 2. Remove the package via uv.
     uv = shutil.which("uv")
     if uv is None:
         print(
             _color(
-                "uv is not on PATH. Nothing to do here; if you installed via\n"
-                "a different method, remove the `tarmy` and `tarmy-server`\n"
-                "binaries manually.",
-                ANSI_RED,
+                "uv is not on PATH; user data was wiped but the tarmy and\n"
+                "tarmy-server binaries are still where you left them.\n"
+                "Remove them manually, or install uv and re-run `tarmy --uninstall`.",
+                ANSI_YELLOW,
             ),
             file=sys.stderr,
         )
         return 1
+
     cmd = [uv, "tool", "uninstall", _PACKAGE_NAME]
     print(_color(f"removing {_PACKAGE_NAME} via uv tool uninstall", ANSI_CYAN), file=sys.stderr)
     try:
@@ -261,14 +307,8 @@ def _self_uninstall() -> int:
     if rc != 0:
         print(_color(f"uninstall failed (uv exited {rc})", ANSI_RED), file=sys.stderr)
         return rc
-    print(
-        _color(
-            "✓ uninstalled. Saved login keys were left in place;\n"
-            "  delete ~/.config/tarmy by hand if you want a clean slate.",
-            ANSI_GREEN,
-        ),
-        file=sys.stderr,
-    )
+
+    print(_color("✓ tarmy fully removed. Thanks for playing.", ANSI_GREEN), file=sys.stderr)
     return 0
 
 
