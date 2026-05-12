@@ -135,7 +135,6 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/planets", "/planets", "list my planets"),
     CommandSpec("/planet", "/planet", "current planet detail"),
     CommandSpec("/switch ", "/switch <#|CODE|name>", "change active planet"),
-    CommandSpec("/buildings", "/buildings", "all buildings (resources + facilities)"),
     CommandSpec("/resources", "/resources", "mines, energy, storage, crawlers"),
     CommandSpec("/facilities", "/facilities", "industry, research, depots"),
     CommandSpec("/upgrade ", "/upgrade <type>", "upgrade a building (+1)"),
@@ -148,7 +147,7 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/inbox", "/inbox [user]", "conversations (or chat with user)"),
     CommandSpec("/logs", "/logs [N]", "recent activity on this planet"),
     CommandSpec("/ships", "/ships", "ships in shipyard + buildable"),
-    CommandSpec("/build ", "/build <type> <n>", "build N ships in shipyard"),
+    CommandSpec("/build ", "/build <thing> [n]", "build ship (with count) or upgrade building"),
     CommandSpec("/defense", "/defense", "planetary defenses + buildable"),
     CommandSpec("/defend ", "/defend <type> <n>", "build N defenses on planet"),
     CommandSpec("/fleets", "/fleets", "active fleet movements"),
@@ -192,7 +191,6 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
   /planets                list my planets
   /planet                 current planet detail
   /switch <#|CODE|name>   change active planet by number / code / name
-  /buildings              all buildings (resources + facilities)
   /resources              mines, energy, storage, crawlers
   /facilities             industry, research, depots
   /upgrade <type>         upgrade a building (+1 level)
@@ -214,7 +212,7 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]fleet & combat[/bold]
   /ships                  list ships in shipyard + buildable types
-  /build <ship> <count>   construct ships at current planet's shipyard
+  /build <thing>          ship: /build small_cargo 5  ·  building: /build robotics_factory
 /defense                planetary defenses + buildable structures
 /defend <type> <n>      build N defenses (e.g. /defend rocket_launcher 20)
   /fleets                 active fleet movements
@@ -307,15 +305,22 @@ def suggestions_for(
             keys = _enc.suggestions(arg_l, limit=20) if arg_l else list(_enc.ALL.keys())[:20]
             return [(f"/info {k}", _make_label(f"/info {k}", _enc.ALL[k].category)) for k in keys]
         if cmd_l in ("/build", "/bs"):
-            # First arg = ship type. After the type is fully typed plus a
-            # space, we stop suggesting and the user types the count.
+            # /build accepts both buildings (forwards to /upgrade — no count)
+            # and ships (count required).
             if " " in arg:
                 return []
-            return [
-                (f"/build {k} ", _make_label(f"/build {k} <count>", "build ship"))
-                for k in _SHIP_KEYS
-                if k.startswith(arg_l)
-            ]
+            out_build: list[tuple[str, Text]] = []
+            for k in _BUILDING_KEYS:
+                if k.startswith(arg_l):
+                    out_build.append(
+                        (f"/build {k}", _make_label(f"/build {k}", "upgrade building"))
+                    )
+            for k in _SHIP_KEYS:
+                if k.startswith(arg_l):
+                    out_build.append(
+                        (f"/build {k} ", _make_label(f"/build {k} <count>", "build ship"))
+                    )
+            return out_build
         if cmd_l in ("/defend", "/dfd"):
             if " " in arg:
                 return []
@@ -1544,8 +1549,8 @@ class ReplScreen(Screen):
             "?": "help",
             "p": "planet",
             "ps": "planets",
-            "b": "buildings",
-            "bld": "buildings",
+            "b": "resources",
+            "bld": "resources",
             "rs": "resources",
             "fc": "facilities",
             "fac": "facilities",
@@ -1901,9 +1906,6 @@ class ReplScreen(Screen):
                 Text(_fmt_seconds(b["next_build_seconds"]), style=style or ""),
             )
         self._log.write(t)
-
-    async def _cmd_buildings(self, args: list[str]) -> None:
-        await self._render_buildings("all buildings")
 
     async def _cmd_resources(self, args: list[str]) -> None:
         await self._render_buildings("resources", _RESOURCE_KEYS)
@@ -2549,20 +2551,36 @@ class ReplScreen(Screen):
         pid = self._require_planet()
         if pid is None:
             return
-        if len(args) < 2:
+        if not args:
             self._log.write(
-                "[red]usage:[/red] /build <ship_type> <count>  (e.g. /build small_cargo 5)"
+                "[red]usage:[/red] /build <thing> [count]  "
+                "[dim](ship → /build small_cargo 5, building → /build robotics_factory)[/dim]"
             )
             return
-        ship = args[0].lower()
+        key = args[0].lower()
+        # A building name forwards to /upgrade — the queue and cost model
+        # is different (single-level step, no count), so we delegate
+        # instead of trying to handle it inline.
+        if key in _BUILDING_KEYS:
+            return await self._cmd_upgrade([key])
+        if key not in _SHIP_KEYS:
+            self._log.write(
+                f"[red]unknown:[/red] {key}  "
+                "[dim](try /info "
+                f"{key}[/dim] [dim]for a hint)[/dim]"
+            )
+            return
+        if len(args) < 2:
+            self._log.write("[red]usage:[/red] /build <ship> <count>")
+            return
         try:
             count = int(args[1])
         except ValueError:
             self._log.write("[red]count must be integer[/red]")
             return
-        r = await self.app.client.build_ship(pid, ship, count)
+        r = await self.app.client.build_ship(pid, key, count)
         self._log.write(
-            f"[green]queued[/green] {count}x {ship}  "
+            f"[green]queued[/green] {count}x {key}  "
             f"cost {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}  "
             f"done at [yellow]{_local_hhmmss(r['finished_at'])}[/yellow] "
             f"([dim]{_remaining_str(r['finished_at'])}[/dim])"
