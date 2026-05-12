@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import shlex
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -528,8 +529,65 @@ def _progress_fraction(started_iso: str, finished_iso: str) -> float:
 
 def _progress_bar(frac: float, width: int = 10) -> tuple[str, str]:
     """Return (filled, empty) two-char strings ready for styled append."""
-    filled = max(0, min(width, int(round(frac * width))))
+    filled = max(0, min(width, round(frac * width)))
     return "█" * filled, "░" * (width - filled)
+
+
+# ---------- ASCII planet globe -------------------------------------------
+# Rendered live in the planet card. Light source rotates around the Y axis
+# so the visible terminator sweeps left → right; characters are picked by
+# diffuse intensity (Lambertian). Terminal cells are ~2× taller than wide,
+# so the x-distance is scaled to keep the silhouette round.
+
+_GLOBE_W = 14
+_GLOBE_H = 7
+_GLOBE_CHARS = " .:-=+*#%@"
+
+
+def _planet_palette(position: int) -> str:
+    """Rough OGame-like color: hot inner positions → red, mid → green/cyan,
+    outer cold → blue/white. Used as the Rich style for every globe cell."""
+    if position <= 3:
+        return "red"
+    if position <= 6:
+        return "yellow"
+    if position <= 9:
+        return "green"
+    if position <= 12:
+        return "cyan"
+    return "bright_white"
+
+
+def _render_planet_globe(angle: float, position: int) -> Text:
+    """Return a multi-line Text of the rotating sphere at the given angle.
+
+    Terminal cells are roughly 2x taller than wide, so we use W = 2*H and
+    normalize the per-cell coordinates so that the box maps to a unit
+    square in physical pixels — the result reads as a round sphere.
+    """
+    color = _planet_palette(position)
+    lx = math.cos(angle)
+    lz = math.sin(angle)
+    half_w = _GLOBE_W / 2
+    half_h = _GLOBE_H / 2
+    text = Text()
+    for y in range(_GLOBE_H):
+        ny = (y + 0.5 - half_h) / half_h
+        for x in range(_GLOBE_W):
+            nx = (x + 0.5 - half_w) / half_w
+            r2 = nx * nx + ny * ny
+            if r2 > 1:
+                text.append(" ")
+                continue
+            nz = math.sqrt(1 - r2)
+            # Lambert diffuse with light at (lx, 0, lz). Normal.y = ny
+            # but the light's Y component is 0, so it drops out.
+            d = max(0.0, nx * lx + nz * lz)
+            idx = min(len(_GLOBE_CHARS) - 1, int(d * (len(_GLOBE_CHARS) - 1) + 0.5))
+            text.append(_GLOBE_CHARS[idx], style=color)
+        if y < _GLOBE_H - 1:
+            text.append("\n")
+    return text
 
 
 def _now_local_hhmmss() -> str:
@@ -827,6 +885,8 @@ class ReplScreen(Screen):
         self._quest_cache: dict[str, Any] | None = None
         # Toggles each tick so we can blink red planets under attack.
         self._blink_phase: bool = False
+        # Light-rotation angle for the ASCII planet globe in the planet card.
+        self._globe_angle: float = 0.0
         self._buildings_cache: dict[str, int] = {}
         self._tech_levels_cache: dict[str, int] = {}
         self._max_lab_level: int = 0
@@ -892,6 +952,8 @@ class ReplScreen(Screen):
 
     def _tick(self) -> None:
         self._blink_phase = not self._blink_phase
+        # Advance the globe a small step each tick → smooth spin at 1 Hz.
+        self._globe_angle = (self._globe_angle + 0.25) % (2 * math.pi)
         self._render_top_bar()
         self._render_planet_card()
         self._render_right_panel()
@@ -1085,7 +1147,16 @@ class ReplScreen(Screen):
             body.append(" — mines throttled to ", style="red")
             body.append(f"{en['production_factor'] * 100:.0f}%", style="bold red")
             body.append("; build a solar plant", style="red")
-        self._planet_card.update(body)
+
+        # ASCII rotating planet on the right. We build a two-column Table
+        # (text on the left, globe on the right) so Static can render it
+        # natively without spending column count on borders.
+        globe = _render_planet_globe(self._globe_angle, int(snap.get("position", 5)))
+        layout = Table.grid(expand=True, padding=(0, 0))
+        layout.add_column(ratio=1)
+        layout.add_column(width=_GLOBE_W + 1, justify="right")
+        layout.add_row(body, globe)
+        self._planet_card.update(layout)
 
     def _render_right_panel(self) -> None:
         if self.app.current_planet_id is None:
