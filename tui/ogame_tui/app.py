@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from textual.app import App
 
+from ogame_tui import options
 from ogame_tui.client import OGameClient
 from ogame_tui.screens.repl import ReplScreen
 
@@ -18,6 +19,13 @@ class OGameApp(App):
         self.current_universe_id: int | None = None
         self.planets: list[dict] = []
         self.me_info: dict | None = None
+        # Persisted theme is applied as soon as the app boots so users
+        # don't see a flash of the default theme.
+        saved_theme = options.get_theme()
+        try:
+            self.theme = saved_theme
+        except Exception:
+            pass
 
     async def on_mount(self) -> None:
         # Bootstrap: kullanici ve planet info'sunu cek

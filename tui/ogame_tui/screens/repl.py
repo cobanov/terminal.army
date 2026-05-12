@@ -139,6 +139,11 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/join ", "/join <tag> [msg]", "apply to join an alliance"),
     CommandSpec("/leave", "/leave", "leave your alliance"),
     CommandSpec("/me", "/me", "show my account"),
+    CommandSpec(
+        "/options",
+        "/options [--theme <name>]",
+        "user prefs (theme, etc.); --theme list shows available",
+    ),
     CommandSpec("/refresh", "/refresh", "force refresh"),
     CommandSpec("/clear", "/clear", "clear log"),
     CommandSpec("/logout", "/logout", "delete key and exit"),
@@ -200,6 +205,8 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]system[/bold]
   /me                     my account info
+  /options                show user prefs
+  /options --theme <name> switch color theme (saved across sessions)
   /refresh                force refresh all panels
   /clear                  clear the log
   /logout                 delete saved key and exit
@@ -446,7 +453,7 @@ def _nav_text() -> Text:
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", ["/msg", "/inbox"]),
         ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
-        ("HELP", ["/help"]),
+        ("HELP", ["/help", "/options"]),
     ]
     t = Text()
     for i, (title, cmds) in enumerate(sections):
@@ -672,10 +679,20 @@ class ReplScreen(Screen):
             self._unread_count = await self.app.client.unread_count()
         except APIError:
             self._unread_count = 0
+        # Autocomplete for /msg and /inbox only suggests usernames from
+        # your existing threads — otherwise at 1000+ players the menu is
+        # unusable. Browse the full roster via the web /players page.
         try:
-            players = await self.app.client.list_players()
+            threads = await self.app.client.threads()
             me_username = self._username()
-            self._players_cache = [p["username"] for p in players if p["username"] != me_username]
+            partners = [
+                t["other_username"]
+                for t in threads
+                if t.get("other_username") and t["other_username"] != me_username
+            ]
+            # de-dupe preserving recency order
+            seen: set[str] = set()
+            self._players_cache = [u for u in partners if not (u in seen or seen.add(u))]
         except APIError:
             pass
         self._render_top_bar()
@@ -1084,6 +1101,54 @@ class ReplScreen(Screen):
             me = await self.app.client.me()
             self._cached_user_id = int(me["id"])
         return self._cached_user_id
+
+    async def _cmd_options(self, args: list[str]) -> None:
+        """User-level preferences.
+
+        Forms:
+          /options                    show current settings
+          /options --theme            list available themes
+          /options --theme <name>     switch theme (persists)
+        """
+        from ogame_tui import options as opts
+
+        flag_idx = next((i for i, a in enumerate(args) if a.startswith("--")), None)
+        if flag_idx is None:
+            self._log.write(
+                f"[bold yellow]theme:[/bold yellow] {self.app.theme}  "
+                f"[dim](change with[/dim] [yellow]/options --theme <name>[/yellow][dim])[/dim]"
+            )
+            return
+
+        flag = args[flag_idx].lower()
+        tail = args[flag_idx + 1 :]
+        if flag in ("--theme", "--t"):
+            available = sorted(self.app.available_themes.keys())
+            if not tail:
+                self._log.write(f"[dim]current:[/dim] [bold]{self.app.theme}[/bold]")
+                self._log.write(f"[dim]available:[/dim] {', '.join(available)}")
+                self._log.write(
+                    "[dim]aliases:[/dim] darcula→dracula, dark→textual-dark, light→textual-light"
+                )
+                return
+            requested = tail[0]
+            resolved = opts.THEME_ALIASES.get(requested.lower(), requested)
+            if resolved not in available:
+                self._log.write(
+                    f"[red]unknown theme:[/red] {requested}  "
+                    f"[dim](try one of: {', '.join(available)})[/dim]"
+                )
+                return
+            try:
+                self.app.theme = resolved
+            except Exception as exc:
+                self._log.write(f"[red]could not apply theme:[/red] {exc}")
+                return
+            opts.set_theme(resolved)
+            self._log.write(f"[green]theme:[/green] {resolved} [dim](saved)[/dim]")
+            return
+
+        self._log.write(f"[red]unknown flag:[/red] {flag}  [dim]known: --theme[/dim]")
 
     async def _cmd_logout(self, args: list[str]) -> None:
         from ogame_tui import credentials as creds
