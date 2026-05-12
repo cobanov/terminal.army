@@ -1,4 +1,4 @@
-/* sakusen — dark + amber terminal theme */
+/* terminal.army — dark + amber terminal theme */
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -479,7 +479,7 @@ td.muted { color: #525252; font-style: italic; }
   color: #0a0a0a;
 }
 
-/* ---- Lobby (sakusen.space root) landing layout ------------------------- */
+/* ---- Lobby (terminal.army root) landing layout ------------------------ */
 .landing-shell {
   max-width: 960px;
   margin: 0 auto;
