@@ -35,7 +35,7 @@ from starlette.types import ASGIApp
 # These cookie names mark a state-changing browser session. If the
 # request carries one of these cookies on a mutating verb, we require
 # a matching Origin/Referer.
-_SESSION_COOKIE_NAMES = frozenset({"ogame_token"})
+_SESSION_COOKIE_NAMES = frozenset({"tarmy_token"})
 
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 

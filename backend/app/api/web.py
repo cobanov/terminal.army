@@ -51,7 +51,7 @@ from backend.app.web_templates import templates
 
 router = APIRouter(tags=["web"])
 
-COOKIE_NAME = "ogame_token"
+COOKIE_NAME = "tarmy_token"
 
 
 # ============================================================================
@@ -154,9 +154,9 @@ async def _landing_rankings(db: AsyncSession, limit: int = 20) -> list[dict]:
 async def root(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is not None:
         return RedirectResponse("/dashboard", status_code=302)
     return await install_page(request, db)
@@ -185,10 +185,10 @@ async def login_page(
     code: str | None = None,
     err: str | None = None,
     ok: str | None = None,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
     if not code:
-        user = await _user_from_cookie(ogame_token, db)
+        user = await _user_from_cookie(tarmy_token, db)
         if user is not None:
             return RedirectResponse("/dashboard", status_code=302)
     return templates.TemplateResponse(
@@ -205,10 +205,10 @@ async def signup_page(
     code: str | None = None,
     err: str | None = None,
     ok: str | None = None,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
     if not code:
-        user = await _user_from_cookie(ogame_token, db)
+        user = await _user_from_cookie(tarmy_token, db)
         if user is not None:
             return RedirectResponse("/dashboard", status_code=302)
     return templates.TemplateResponse(
@@ -272,7 +272,7 @@ async def signup_submit(
         bound = await bind_token_to_code(db, code=code, token=token, user_id=user.id)
         if not bound:
             return RedirectResponse(
-                "/login?err=Auth+code+invalid+or+expired.+Restart+sakusen+in+terminal.",
+                "/login?err=Auth+code+invalid+or+expired.+Restart+tarmy+in+terminal.",
                 status_code=303,
             )
         return templates.TemplateResponse(
@@ -307,7 +307,7 @@ async def signin_submit(
         bound = await bind_token_to_code(db, code=code, token=token, user_id=user.id)
         if not bound:
             return RedirectResponse(
-                "/login?err=Auth+code+invalid+or+expired.+Restart+sakusen+in+terminal.",
+                "/login?err=Auth+code+invalid+or+expired.+Restart+tarmy+in+terminal.",
                 status_code=303,
             )
         return templates.TemplateResponse(
@@ -335,9 +335,9 @@ async def logout() -> Response:
 async def me_page(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -368,10 +368,10 @@ async def me_page(
 async def dashboard(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
     planet_id: int | None = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -490,9 +490,9 @@ async def dashboard(
 async def leaderboard_page(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -560,11 +560,11 @@ PLAYERS_PER_PAGE = 50
 async def players_page(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
     page: int = 1,
     q: str | None = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -623,11 +623,11 @@ async def players_page(
 async def alliances_page(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
     err: str | None = None,
     ok: str | None = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -680,9 +680,9 @@ async def alliance_create_form(
     tag: Annotated[str, Form(min_length=2, max_length=6, pattern=r"^[A-Za-z0-9]+$")],
     name: Annotated[str, Form(min_length=3, max_length=64)],
     description: Annotated[str, Form(max_length=500)] = "",
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -712,11 +712,11 @@ async def alliance_detail_page(
     tag: str,
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
     err: str | None = None,
     ok: str | None = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -801,9 +801,9 @@ async def alliance_detail_page(
 async def alliance_join_form(
     tag: str,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -842,9 +842,9 @@ async def alliance_request_approve_form(
     tag: str,
     username: str,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
@@ -891,9 +891,9 @@ async def alliance_request_reject_form(
     tag: str,
     username: str,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
     a_res = await db.execute(select(Alliance).where(Alliance.tag == tag.upper()))
@@ -920,9 +920,9 @@ async def alliance_request_reject_form(
 @router.post("/alliances/withdraw-request")
 async def alliance_request_withdraw_form(
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
     res = await db.execute(
@@ -939,9 +939,9 @@ async def alliance_request_withdraw_form(
 async def alliance_leave_form(
     tag: str,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    user = await _user_from_cookie(ogame_token, db)
+    user = await _user_from_cookie(tarmy_token, db)
     if user is None:
         return RedirectResponse("/login", status_code=302)
 

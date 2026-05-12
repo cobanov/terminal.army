@@ -85,9 +85,9 @@ def _forbidden(your_user: str, admin: str) -> HTMLResponse:
 async def admin_dashboard(
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
     admin_user = auth
@@ -127,9 +127,9 @@ async def admin_dashboard(
 async def admin_set_speed_form(
     db: DBSession,
     speed: Annotated[int, Form(ge=1, le=100)],
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
     universe = await get_default_universe(db)
@@ -158,9 +158,9 @@ async def admin_user_edit(
     user_id: int,
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
 
@@ -197,9 +197,9 @@ async def admin_save_researches(
     user_id: int,
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
 
@@ -232,9 +232,9 @@ async def admin_create_planet(
     system: Annotated[int, Form(ge=1, le=499)],
     position: Annotated[int, Form(ge=1, le=15)],
     name: Annotated[str, Form(min_length=1, max_length=32)] = "Colony",
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
 
@@ -289,9 +289,9 @@ async def admin_planet_edit(
     planet_id: int,
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
 
@@ -341,9 +341,9 @@ async def admin_save_planet(
     planet_id: int,
     request: Request,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
 
@@ -441,9 +441,9 @@ async def admin_delete_planet(
     user_id: int,
     planet_id: int,
     db: DBSession,
-    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    tarmy_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    auth = await _require_admin_or_redirect(ogame_token, db)
+    auth = await _require_admin_or_redirect(tarmy_token, db)
     if isinstance(auth, Response):
         return auth
 

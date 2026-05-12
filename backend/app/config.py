@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # secret. `env=prod` rejects them at startup.
     env: str = "dev"
 
-    database_url: str = "sqlite+aiosqlite:///./ogame.db"
+    database_url: str = "sqlite+aiosqlite:///./tarmy.db"
     jwt_secret: str = DEV_JWT_SECRET
     jwt_algorithm: str = "HS256"
     # Long-lived: 1 year. Key gibi davranir.
