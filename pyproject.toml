@@ -1,7 +1,7 @@
 [project]
 name = "sakusen"
 version = "0.1.0"
-description = "Sakusen (策戦) — terminal-native multiplayer space strategy"
+description = "sakusen — terminal-native multiplayer space strategy"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }

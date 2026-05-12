@@ -1,4 +1,4 @@
-# Space Galactic - ana backend + postgres
+# sakusen — ana backend + postgres
 #
 # Calistir:
 #   docker compose up -d
@@ -51,9 +51,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       # Server identity (sharding — see docs/SHARDING.md)
-      SERVER_NAME: ${SERVER_NAME:-Yamato}
+      SERVER_NAME: ${SERVER_NAME:-s1}
       SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-the first universe}
       SERVER_MAX_USERS: ${SERVER_MAX_USERS:-5000}
+      IS_LOBBY: ${IS_LOBBY:-false}
       LOBBY_URL: ${LOBBY_URL:-}
       LOBBY_SERVERS: ${LOBBY_SERVERS:-}
     ports:

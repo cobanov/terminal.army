@@ -1,8 +1,6 @@
-# sakusen 策戦
+# sakusen
 
 Terminal-native multiplayer space strategy. Python + FastAPI backend, Textual TUI client. The same REST API will later serve a web frontend.
-
-> **策戦 / sakusen** — Japanese for "strategy, military operation".
 
 ## Architecture
 

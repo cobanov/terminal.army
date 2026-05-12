@@ -126,7 +126,7 @@ def _device_auth_flow(backend_url: str) -> str | None:
     url = f"{backend_url}/login?code={code}"
 
     print(file=sys.stderr)
-    print(_color("┌─ sakusen 策戦 · sign in ", ANSI_BOLD) + _color("─" * 39, ANSI_DIM), file=sys.stderr)
+    print(_color("┌─ sakusen · sign in ", ANSI_BOLD) + _color("─" * 39, ANSI_DIM), file=sys.stderr)
     print(_color("│", ANSI_DIM), file=sys.stderr)
     print(_color("│ ", ANSI_DIM) + "Open this URL in your browser:", file=sys.stderr)
     print(_color("│   ", ANSI_DIM) + _color(url, ANSI_CYAN), file=sys.stderr)
@@ -212,7 +212,7 @@ def _get_or_acquire_credentials(backend_url: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="sakusen",
-        description="Sakusen 策戦 — terminal-native multiplayer space strategy",
+        description="sakusen — terminal-native multiplayer space strategy",
         epilog=(
             "Default: connects to $SAKUSEN_BACKEND (or legacy $OGAME_BACKEND), "
             "otherwise starts solo mode. "
@@ -289,7 +289,7 @@ def server_main() -> None:
     """sakusen-server console script: backend only (multiplayer host)."""
     parser = argparse.ArgumentParser(
         prog="sakusen-server",
-        description="Sakusen 策戦 backend (multiplayer host)",
+        description="sakusen backend (multiplayer host)",
     )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)

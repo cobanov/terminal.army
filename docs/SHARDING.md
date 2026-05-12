@@ -1,9 +1,9 @@
 # Multi-server (sharding) deployment
 
-Sakusen scales horizontally by running **one backend stack per universe**.
+sakusen scales horizontally by running **one backend stack per universe**.
 Each shard is fully independent — its own Postgres, its own players, its
 own galaxy. There is no cross-server communication. A single **lobby**
-page lists all servers so new players can pick one.
+page at `sakusen.space` lists all servers so new players can pick one.
 
 Recommended per-shard capacity:
 
@@ -19,20 +19,14 @@ deploy with Caddy / Docker).
 
 ## Naming convention
 
-Pick a theme. The project ships with a Japanese set that pairs with the
-策戦 brand:
+Servers are named **s1, s2, s3, ...** and reachable at `<id>.sakusen.space`:
 
-- **Yamato** (大和) — "great harmony"
-- **Tengu** (天狗) — sky spirit
-- **Akatsuki** (暁) — dawn
-- **Ryu** (龍) — dragon
-- **Kaiju** (怪獣) — giant monster
-- **Hoshi** (星) — star
-- **Sora** (空) — sky
-- **Tsuki** (月) — moon
+- `s1.sakusen.space` — first shard
+- `s2.sakusen.space` — second shard
+- … etc
 
 Each shard advertises itself by `SERVER_NAME` (env var) and gets its own
-subdomain — e.g. `yamato.sakusen.space`, `tengu.sakusen.space`.
+subdomain. New shards just continue the numbering.
 
 ---
 
@@ -40,19 +34,21 @@ subdomain — e.g. `yamato.sakusen.space`, `tengu.sakusen.space`.
 
 ```
                   https://sakusen.space
-                  (lobby + install page)
+                       (lobby only)
                               │
         ┌─────────────────────┼─────────────────────┐
         ↓                     ↓                     ↓
- yamato.sakusen.space   tengu.sakusen.space   akatsuki.sakusen.space
-  Yamato (482/500)      Tengu (201/500)       Akatsuki (12/500)
-  own Postgres          own Postgres          own Postgres
+  s1.sakusen.space      s2.sakusen.space      s3.sakusen.space
+   s1 (482/5000)         s2 (201/5000)         s3 (12/5000)
+   own Postgres          own Postgres          own Postgres
 ```
 
-- The lobby is just a sakusen instance with `LOBBY_SERVERS` configured. It
-  polls each known shard's `/stats` endpoint and renders the list.
-- Shards have `LOBBY_URL` pointing back to `sakusen.space` so signed-in
-  players see "← lobby" in their topbar.
+- The lobby is a sakusen instance with `IS_LOBBY=true` and `LOBBY_SERVERS`
+  configured. It polls each known shard's `/stats` endpoint and renders the
+  picker. Signup/login on the lobby itself are disabled — users get
+  redirected to a shard.
+- Shards have `LOBBY_URL=https://sakusen.space` so signed-in players see
+  "← lobby" in their topbar.
 - Each shard has its own admin (`ADMIN_USERNAME` env), own universe speed,
   etc. — they don't share anything.
 
@@ -61,22 +57,21 @@ subdomain — e.g. `yamato.sakusen.space`, `tengu.sakusen.space`.
 ## Per-shard `.env`
 
 ```env
-# Identity (the only difference between shards)
-SERVER_NAME=Yamato
+# Identity
+SERVER_NAME=s1
 SERVER_DESCRIPTION=the first universe
 SERVER_MAX_USERS=5000
 LOBBY_URL=https://sakusen.space
+IS_LOBBY=false
 
 # Standard
 DATABASE_URL=postgresql+asyncpg://ogame:ogame@postgres:5432/ogame
 JWT_SECRET=<unique per shard — openssl rand -hex 32>
 JWT_EXPIRE_MINUTES=10080
-DEFAULT_UNIVERSE_NAME=Yamato         # shows in galaxy text
+DEFAULT_UNIVERSE_NAME=s1             # shows in galaxy text
 DEFAULT_UNIVERSE_SPEED=1
 ADMIN_USERNAME=<your username>
-HOST_PORT=9931                       # per host this stays 9931 if one
-                                     # shard per host, or 9931/9932/... if
-                                     # multiple shards share a host
+HOST_PORT=9931
 ```
 
 Each shard's `JWT_SECRET` must be unique — otherwise tokens issued by one
@@ -86,26 +81,28 @@ shard could be replayed against another.
 
 ## Lobby `.env`
 
-The lobby is a sakusen instance with **no players**. It exposes only `/`,
-`/install`, and `/stats` itself.
+The lobby is a sakusen instance with **no players** — `IS_LOBBY=true`
+turns off local signup/login and turns the `/` route into the server picker.
 
 ```env
 # Lobby identity
-SERVER_NAME=Lobby
-SERVER_MAX_USERS=0                   # nobody can sign up here
+IS_LOBBY=true
+SERVER_NAME=lobby
+SERVER_MAX_USERS=0
 
-# Server list (this is the magic — sakusen.space polls these)
-LOBBY_SERVERS=Yamato=https://yamato.sakusen.space,Tengu=https://tengu.sakusen.space,Akatsuki=https://akatsuki.sakusen.space
+# Server list — id=url with optional :coming-soon suffix
+LOBBY_SERVERS=s1=https://s1.sakusen.space,s2=https://s2.sakusen.space:coming-soon,s3=https://s3.sakusen.space:coming-soon
 
-# Standard — Postgres still required (FastAPI needs a DB to start, even if
-# unused). A tiny instance is fine.
+# Standard — Postgres still required (FastAPI needs a DB to start). A tiny
+# instance is fine; the lobby holds zero game data.
 DATABASE_URL=postgresql+asyncpg://ogame:ogame@postgres:5432/ogame
 JWT_SECRET=<openssl rand -hex 32>
 HOST_PORT=9931
 ```
 
-The lobby will render a table at `https://sakusen.space/` listing each
-server with live registered/max counts and an "enter →" link.
+The lobby renders cards at `https://sakusen.space/` listing each server
+with live registered/max counts. Servers marked `:coming-soon` show as
+disabled placeholders.
 
 ---
 
@@ -115,10 +112,10 @@ server with live registered/max counts and an "enter →" link.
 
 Recommended. Each shard is on its own $5–10 VPS.
 
-- `lobby.sakusen.space` → 1 small VPS hosting the lobby instance
-- `yamato.sakusen.space` → 1 VPS hosting Yamato (clone the repo, set
+- `sakusen.space` → 1 small VPS hosting the lobby instance
+- `s1.sakusen.space` → 1 VPS hosting shard s1 (clone the repo, set
   per-shard `.env`, `make server-up`)
-- `tengu.sakusen.space` → 1 VPS hosting Tengu
+- `s2.sakusen.space` → 1 VPS hosting shard s2
 - … etc
 
 Each VPS has its own Caddy reverse-proxy pointing to its single docker
@@ -130,11 +127,11 @@ For tight budgets, stack everything on a single bigger machine (4 vCPU,
 8 GB RAM). Use distinct `HOST_PORT` per shard:
 
 ```bash
-# yamato/
-HOST_PORT=9931 docker compose -p yamato up -d
+# s1/
+HOST_PORT=9931 docker compose -p s1 up -d
 
-# tengu/  (separate clone, separate volume)
-HOST_PORT=9932 docker compose -p tengu up -d
+# s2/  (separate clone, separate volume)
+HOST_PORT=9932 docker compose -p s2 up -d
 
 # lobby/
 HOST_PORT=9939 docker compose -p lobby up -d
@@ -143,9 +140,9 @@ HOST_PORT=9939 docker compose -p lobby up -d
 Then Caddy on the same host:
 
 ```Caddyfile
-yamato.sakusen.space  { reverse_proxy 127.0.0.1:9931 }
-tengu.sakusen.space   { reverse_proxy 127.0.0.1:9932 }
-sakusen.space         { reverse_proxy 127.0.0.1:9939 }
+s1.sakusen.space  { reverse_proxy 127.0.0.1:9931 }
+s2.sakusen.space  { reverse_proxy 127.0.0.1:9932 }
+sakusen.space     { reverse_proxy 127.0.0.1:9939 }
 ```
 
 Note: `docker compose -p <name>` gives each stack its own project namespace
@@ -156,15 +153,15 @@ and corrupt each other.
 
 ## Adding a new shard
 
-1. Pick a name from the unused list (Ryu, Kaiju, Hoshi, …)
+1. Pick the next id (s4, s5, …)
 2. Provision a host (or reuse one with a free port)
-3. Clone the repo to `/opt/sakusen-ryu/`
-4. Set its `.env` (unique `SERVER_NAME`, unique `JWT_SECRET`)
+3. Clone the repo to `/opt/sakusen-s4/`
+4. Set its `.env` (unique `SERVER_NAME=s4`, unique `JWT_SECRET`)
 5. `make server-up`
-6. Add a Caddy block: `ryu.sakusen.space { reverse_proxy 127.0.0.1:9931 }`
-7. **Update the lobby's `LOBBY_SERVERS`** to include the new shard:
+6. Add a Caddy block: `s4.sakusen.space { reverse_proxy 127.0.0.1:9931 }`
+7. **Update the lobby's `LOBBY_SERVERS`** to mark s4 as live (or add it):
    ```
-   LOBBY_SERVERS=Yamato=...,Tengu=...,Ryu=https://ryu.sakusen.space
+   LOBBY_SERVERS=s1=...,s2=...,s3=...,s4=https://s4.sakusen.space
    ```
 8. `make server-reload` on the lobby (recreates the container so it reads
    the new env)
@@ -177,7 +174,7 @@ The new server appears in the lobby immediately.
 
 When a universe is "dead" (no activity for 6 months, say):
 
-1. Backup: `docker compose exec postgres pg_dump -U ogame ogame > yamato-final.sql.gz`
+1. Backup: `docker compose exec postgres pg_dump -U ogame ogame > s1-final.sql.gz`
 2. Remove from lobby's `LOBBY_SERVERS`, `make server-reload` on lobby
 3. Shut down the shard: `make server-down`
 4. Optionally release the VPS

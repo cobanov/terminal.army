@@ -308,3 +308,67 @@ td.muted { color: #525252; font-style: italic; }
   font-style: italic;
   font-size: 0.85rem;
 }
+
+/* ---- Lobby server picker ------------------------------------------------ */
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+.server-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #1f1f1f;
+  background: #0a0a0a;
+  padding: 0.9rem 1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  min-height: 140px;
+}
+.server-card--live:hover {
+  border-color: #fbbf24;
+  background: #111;
+}
+.server-card--soon, .server-card--down {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.server-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.6rem;
+}
+.server-card-id {
+  font-family: ui-monospace, monospace;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #fbbf24;
+  letter-spacing: 0.05em;
+}
+.server-card-status {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid currentColor;
+}
+.server-card-status--live { color: #84cc16; }
+.server-card-status--soon { color: #525252; }
+.server-card-status--down { color: #737373; }
+.server-card-status--full { color: #ef4444; }
+.server-card-body { flex: 1; }
+.server-card-pop {
+  font-family: ui-monospace, monospace;
+  font-size: 1.1rem;
+  margin-bottom: 0.2rem;
+}
+.server-card-foot {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

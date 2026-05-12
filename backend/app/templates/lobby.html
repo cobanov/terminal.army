@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}sakusen — pick a server{% endblock %}
+{% block shell_class %}login-shell{% endblock %}
+
+{% block content %}
+<div class="login-container">
+  {% include "_logo.html" %}
+
+  <div class="card">
+    <h2 class="card-title">Servers <small>pick a universe to play in</small></h2>
+    <div class="server-grid">
+      {% for s in lobby_servers %}
+        {% if s.coming_soon %}
+          <div class="server-card server-card--soon">
+            <div class="server-card-head">
+              <span class="server-card-id">{{ s.name }}</span>
+              <span class="server-card-status server-card-status--soon">coming soon</span>
+            </div>
+            <div class="server-card-body">
+              <div class="server-card-pop">— / —</div>
+              <div class="dim">not deployed yet</div>
+            </div>
+            <div class="server-card-foot">
+              <span class="dim">unavailable</span>
+            </div>
+          </div>
+        {% elif s.unreachable %}
+          <div class="server-card server-card--down">
+            <div class="server-card-head">
+              <span class="server-card-id">{{ s.name }}</span>
+              <span class="server-card-status server-card-status--down">offline</span>
+            </div>
+            <div class="server-card-body">
+              <div class="server-card-pop">— / —</div>
+              <div class="dim">unreachable</div>
+            </div>
+            <div class="server-card-foot">
+              <code>{{ s.url }}</code>
+            </div>
+          </div>
+        {% else %}
+          <a class="server-card server-card--live" href="{{ s.url }}/signup">
+            <div class="server-card-head">
+              <span class="server-card-id">{{ s.name }}</span>
+              {% if s.full %}
+                <span class="server-card-status server-card-status--full">FULL</span>
+              {% else %}
+                <span class="server-card-status server-card-status--live">live</span>
+              {% endif %}
+            </div>
+            <div class="server-card-body">
+              <div class="server-card-pop" style="color:{{ s.color }};">{{ s.registered }} / {{ s.max_users }}</div>
+              <div class="dim">{{ s.description or "open for play" }}</div>
+            </div>
+            <div class="server-card-foot">
+              <span style="color:#fbbf24;">sign up &rarr;</span>
+              <span class="dim">or <a href="{{ s.url }}/login" style="color:#fbbf24;">login</a></span>
+            </div>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <p class="hint" style="margin-top:1rem;">
+      Each server is an independent universe with its own galaxy and its own player list.
+      Pick one and your account lives only on that server.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">What is this <small>tldr</small></h2>
+    <p>
+      A terminal-native multiplayer space strategy game in the spirit of OGame.
+      You play from your terminal via the <code>sakusen</code> CLI — every action
+      is a slash-command. Resources accrue in real time. Multiple players share
+      the same universe and can attack, spy on, and message each other.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Install <small>one terminal, one command</small></h2>
+
+    <p class="hint" style="margin-bottom:0.8rem;">1. Install <code>uv</code> if you don't have it:</p>
+    <pre class="key">curl -LsSf https://astral.sh/uv/install.sh | sh</pre>
+
+    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">2. Install the sakusen client:</p>
+    <pre class="key">uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"</pre>
+
+    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">3. Point at the server you picked above (add to your shell rc):</p>
+    <pre class="key">export SAKUSEN_BACKEND="https://s1.sakusen.space"</pre>
+
+    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">4. Start playing:</p>
+    <pre class="key">sakusen</pre>
+  </div>
+
+  <p class="switch" style="margin-top:2rem;">
+    Source: <a href="https://github.com/cobanov/space-galactic-tui">github.com/cobanov/space-galactic-tui</a>
+  </p>
+</div>
+{% endblock %}

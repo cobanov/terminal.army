@@ -1,49 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Install · sakusen 策戦{% endblock %}
+{% block title %}Install · sakusen{% endblock %}
 {% block shell_class %}login-shell{% endblock %}
 
 {% block content %}
 <div class="login-container">
   {% include "_logo.html" %}
-
-  {% if lobby_servers %}
-    <div class="card">
-      <h2 class="card-title">Servers <small>pick a universe</small></h2>
-      <table>
-        <thead>
-          <tr><th>name</th><th>population</th><th>url</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for s in lobby_servers %}
-          <tr>
-            <td><b>{{ s.name }}</b><div class="dim" style="font-size:0.75rem;">{{ s.description }}</div></td>
-            <td>
-              {% if s.unreachable %}
-                <span class="muted">offline</span>
-              {% elif s.full %}
-                <span style="color:#ef4444;">FULL</span>
-              {% else %}
-                <span style="color:{{ s.color }};">{{ s.registered }}/{{ s.max_users }}</span>
-              {% endif %}
-            </td>
-            <td><code>{{ s.url }}</code></td>
-            <td>
-              {% if s.full or s.unreachable %}
-                <span class="dim">closed</span>
-              {% else %}
-                <a href="{{ s.url }}" style="color:#fbbf24;">enter &rarr;</a>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <p class="hint" style="margin-top:0.8rem;">
-        Each server is an independent universe with its own galaxy.
-        Use the URL as your <code>SAKUSEN_BACKEND</code>.
-      </p>
-    </div>
-  {% endif %}
 
   <div class="card">
     <h2 class="card-title">What is this <small>tldr</small></h2>
