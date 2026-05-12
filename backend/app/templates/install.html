@@ -1,50 +1,79 @@
 {% extends "base.html" %}
-{% block title %}Install · sakusen{% endblock %}
-{% block shell_class %}login-shell{% endblock %}
+{% block title %}sakusen — terminal space strategy{% endblock %}
+{% block shell_class %}landing-shell{% endblock %}
 
 {% block content %}
-<div class="login-container">
-  {% include "_logo.html" %}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN</span>
+    <span class="topbar-user">terminal space strategy</span>
+  </div>
+  <div class="topbar-right">
+    <a class="btn-ghost" href="/login">login</a>
+    <a class="btn-primary" href="/signup">sign up &rarr;</a>
+  </div>
+</div>
 
+<div class="landing-hero">
+  {% include "_logo.html" %}
+</div>
+
+<div class="landing-content">
   <div class="card">
     <h2 class="card-title">What is this <small>tldr</small></h2>
     <p>
-      A terminal-native multiplayer space strategy game, in the spirit of
-      OGame. You play from your terminal via the <code>sakusen</code> CLI —
-      every action is a slash-command. Resources accrue in real time. Multiple
-      players share the same universe and can attack, spy on, and message
-      each other.
+      A terminal-native multiplayer space strategy game in the spirit of OGame.
+      You play from your terminal via the <code>sakusen</code> CLI — every action
+      is a slash-command. Resources accrue in real time. Multiple players share
+      the same universe and can attack, spy on, and message each other.
     </p>
   </div>
 
   <div class="card">
-    <h2 class="card-title">Install <small>one terminal, one command</small></h2>
-
-    <p class="hint" style="margin-bottom:0.8rem;">1. Install <code>uv</code> if you don't have it:</p>
-    <pre class="key">curl -LsSf https://astral.sh/uv/install.sh | sh</pre>
-
-    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">2. Install the sakusen client:</p>
+    <h2 class="card-title">Install <small>one terminal, two commands</small></h2>
+    <p class="hint" style="margin-bottom:0.6rem;">1. Install the sakusen CLI:</p>
     <pre class="key">uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"</pre>
-
-    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">3. Point at this server (add to your shell rc):</p>
-    <pre class="key">export SAKUSEN_BACKEND="{{ backend_url }}"</pre>
-
-    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">4. Start playing:</p>
+    <p class="hint" style="margin:1rem 0 0.6rem 0;">2. Start playing:</p>
     <pre class="key">sakusen</pre>
-
     <p class="hint" style="margin-top:1rem;">
-      On first launch the CLI opens a browser URL — sign in here, return to
-      the terminal, the TUI starts.
+      No config needed — the CLI defaults to <code>sakusen.space</code>. On first
+      launch it opens a browser URL, sign in there, the TUI takes over once
+      you're authenticated. Need <code>uv</code>?
+      <code>curl -LsSf https://astral.sh/uv/install.sh | sh</code>.
     </p>
   </div>
 
   <div class="card">
-    <h2 class="card-title">Account <small>browser-side</small></h2>
-    <p>You can also browse a dashboard, edit your profile, and message other players from this web UI.</p>
-    <p style="margin-top:0.8rem;">
-      <a href="/login" style="color:#fbbf24; margin-right:1.5rem;">&rarr; Sign in</a>
-      <a href="/signup" style="color:#fbbf24;">&rarr; Create account</a>
-    </p>
+    <h2 class="card-title">Rankings <small>top {{ rankings|length }} commanders</small></h2>
+    {% if rankings %}
+      <table>
+        <thead>
+          <tr>
+            <th class="right">#</th>
+            <th>commander</th>
+            <th>alliance</th>
+            <th class="right">points</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rankings %}
+          <tr>
+            <td class="right" style="font-family:ui-monospace,monospace;">
+              {% if r.rank == 1 %}<span style="color:#fbbf24;">{{ r.rank }}</span>
+              {% elif r.rank == 2 %}<span style="color:#a3a3a3;">{{ r.rank }}</span>
+              {% elif r.rank == 3 %}<span style="color:#b87333;">{{ r.rank }}</span>
+              {% else %}<span class="dim">{{ r.rank }}</span>{% endif %}
+            </td>
+            <td><b>{{ r.username }}</b></td>
+            <td>{% if r.alliance_tag %}<span style="color:#fbbf24;">[{{ r.alliance_tag }}]</span>{% else %}<span class="dim">—</span>{% endif %}</td>
+            <td class="right" style="font-family:ui-monospace,monospace;">{{ fmt_int(r.total_points) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">No players yet. Be the first to sign up.</p>
+    {% endif %}
   </div>
 
   <p class="switch" style="margin-top:2rem;">

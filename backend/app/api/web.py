@@ -9,7 +9,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-import httpx
 from fastapi import APIRouter, Cookie, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import and_, desc, func, or_, select
@@ -104,121 +103,34 @@ async def _registered_count(db: AsyncSession) -> int:
 
 
 # ============================================================================
-# Lobby helpers
+# Landing page rankings helper
 # ============================================================================
-def _parse_lobby_servers(spec: str) -> list[tuple[str, str, bool]]:
-    """Return list of (id, url, coming_soon).
+async def _landing_rankings(db: AsyncSession, limit: int = 20) -> list[dict]:
+    """Top N players for the install landing page. Unauthenticated."""
+    users_res = await db.execute(select(User).order_by(User.id))
+    users = list(users_res.scalars().all())
 
-    Format: `id=url[:coming-soon][,id2=url2[:coming-soon]]`.
-    """
-    out: list[tuple[str, str, bool]] = []
-    for entry in spec.split(","):
-        entry = entry.strip()
-        if not entry or "=" not in entry:
-            continue
-        name, rest = entry.split("=", 1)
-        rest = rest.strip()
-        coming_soon = False
-        if rest.endswith(":coming-soon"):
-            rest = rest[: -len(":coming-soon")]
-            coming_soon = True
-        out.append((name.strip(), rest.strip(), coming_soon))
-    return out
+    member_res = await db.execute(
+        select(AllianceMember.user_id, Alliance.tag)
+        .join(Alliance, Alliance.id == AllianceMember.alliance_id)
+    )
+    alliance_by_user: dict[int, str] = {uid: tag for uid, tag in member_res.all()}
 
+    scored: list[tuple[User, int]] = []
+    for u in users:
+        pts = await user_points(db, u.id)
+        scored.append((u, pts["total_points"]))
+    scored.sort(key=lambda t: t[1], reverse=True)
 
-async def _poll_lobby_servers(servers: list[tuple[str, str, bool]]) -> list[dict]:
-    out: list[dict] = []
-    async with httpx.AsyncClient(timeout=2.0) as client:
-        for name, url, coming_soon in servers:
-            if coming_soon:
-                out.append({
-                    "name": name, "url": url,
-                    "description": "",
-                    "registered": 0, "max_users": 0, "full": False,
-                    "color": "#525252", "unreachable": False,
-                    "coming_soon": True,
-                })
-                continue
-            try:
-                r = await client.get(f"{url.rstrip('/')}/stats")
-                stats = r.json()
-                reg = int(stats.get("registered", 0))
-                cap = int(stats.get("max_users", 0) or 0)
-                full = bool(stats.get("full", False))
-                load_pct = (reg / cap * 100) if cap else 0
-                color = "#ef4444" if full else ("#84cc16" if load_pct < 70 else "#fbbf24")
-                out.append({
-                    "name": name, "url": url,
-                    "description": stats.get("description", ""),
-                    "registered": reg, "max_users": cap, "full": full,
-                    "color": color, "unreachable": False,
-                    "coming_soon": False,
-                })
-            except Exception:
-                out.append({
-                    "name": name, "url": url,
-                    "description": "",
-                    "registered": 0, "max_users": 0, "full": False,
-                    "color": "#525252", "unreachable": True,
-                    "coming_soon": False,
-                })
-    return out
-
-
-async def _poll_lobby_rankings(
-    servers: list[tuple[str, str, bool]], limit: int = 20
-) -> list[dict]:
-    """Fetch each live shard's /api/leaderboard/public and merge by points."""
-    merged: list[dict] = []
-    async with httpx.AsyncClient(timeout=2.5) as client:
-        for name, url, coming_soon in servers:
-            if coming_soon:
-                continue
-            try:
-                r = await client.get(
-                    f"{url.rstrip('/')}/api/leaderboard/public",
-                    params={"limit": limit},
-                )
-                data = r.json()
-                for row in data.get("rows", []):
-                    merged.append({
-                        "server": name,
-                        "server_url": url,
-                        "username": row["username"],
-                        "alliance_tag": row.get("alliance_tag"),
-                        "total_points": int(row["total_points"]),
-                    })
-            except Exception:
-                continue
-    merged.sort(key=lambda r: r["total_points"], reverse=True)
-    for i, row in enumerate(merged[:limit], start=1):
-        row["rank"] = i
-    return merged[:limit]
-
-
-def _primary_shard_url(lobby_servers: list[dict]) -> str | None:
-    """If there's exactly one live, non-full shard, return its URL.
-
-    Used to auto-route lobby Login / Sign-up buttons when the picker has
-    only one viable option.
-    """
-    live = [s for s in lobby_servers if not s.get("coming_soon") and not s.get("unreachable") and not s.get("full")]
-    if len(live) == 1:
-        return live[0]["url"]
-    return None
-
-
-async def _render_lobby(request: Request) -> Response:
-    settings = get_settings()
-    parsed = _parse_lobby_servers(settings.lobby_servers)
-    lobby_servers = await _poll_lobby_servers(parsed)
-    rankings = await _poll_lobby_rankings(parsed)
-    return templates.TemplateResponse(name="lobby.html", request=request, context={
-        "request": request,
-        "lobby_servers": lobby_servers,
-        "rankings": rankings,
-        "primary_shard_url": _primary_shard_url(lobby_servers),
-    })
+    return [
+        {
+            "rank": i,
+            "username": u.username,
+            "alliance_tag": alliance_by_user.get(u.id),
+            "total_points": total,
+        }
+        for i, (u, total) in enumerate(scored[:limit], start=1)
+    ]
 
 
 # ============================================================================
@@ -230,9 +142,6 @@ async def root(
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    settings = get_settings()
-    if settings.is_lobby:
-        return await _render_lobby(request)
     user = await _user_from_cookie(ogame_token, db)
     if user is not None:
         return RedirectResponse("/dashboard", status_code=302)
@@ -244,15 +153,10 @@ async def install_page(
     request: Request,
     db: DBSession,
 ) -> Response:
-    settings = get_settings()
-    if settings.is_lobby:
-        return await _render_lobby(request)
-    host = request.headers.get("host", "sakusen.space")
-    proto = "https" if request.url.scheme == "https" else "http"
-    backend_url = f"{proto}://{host}"
+    rankings = await _landing_rankings(db)
     return templates.TemplateResponse(name="install.html", request=request, context={
             "request": request,
-            "backend_url": backend_url,
+            "rankings": rankings,
         },
     )
 
@@ -266,8 +170,6 @@ async def login_page(
     ok: str | None = None,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    if get_settings().is_lobby:
-        return await _render_lobby(request)
     if not code:
         user = await _user_from_cookie(ogame_token, db)
         if user is not None:
@@ -285,8 +187,6 @@ async def signup_page(
     ok: str | None = None,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
-    if get_settings().is_lobby:
-        return await _render_lobby(request)
     if not code:
         user = await _user_from_cookie(ogame_token, db)
         if user is not None:
@@ -543,7 +443,6 @@ async def dashboard(
             "registered_count": registered_count,
             "server_name": settings.server_name,
             "server_max_users": settings.server_max_users,
-            "lobby_url": settings.lobby_url,
             "is_admin": _is_admin(user),
             "alliance_tag": alliance.tag if alliance else None,
         },

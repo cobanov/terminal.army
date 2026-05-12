@@ -23,26 +23,10 @@ class Settings(BaseSettings):
     # (speed, etc.) via /admin/* endpoints. Empty = no one is admin.
     admin_username: str = ""
 
-    # --- Server sharding -----------------------------------------------------
-    # Each backend instance represents one server (= one universe / shard).
-    # The lobby (sakusen.space) lists all known servers from LOBBY_SERVERS.
-    # Server identifier (s1, s2, s3, ...). Each shard is reachable at
-    # <id>.sakusen.space.
+    # Server identity. Shown in the topbar and /stats endpoint.
     server_name: str = "s1"
     server_description: str = "the first universe"
     server_max_users: int = 5000
-    # When true, this instance behaves as the lobby (sakusen.space root): the
-    # / route shows the server picker instead of forwarding to local signup,
-    # and signup/login are disabled locally (users get sent to a shard).
-    is_lobby: bool = False
-    # Comma-separated list of shard servers, used only when IS_LOBBY=true.
-    # Format: "id=url[:status][,id2=url2[:status]]" where status is one of
-    # live (default) or coming-soon.
-    # Example: "s1=https://s1.sakusen.space,s2=https://s2.sakusen.space:coming-soon"
-    lobby_servers: str = ""
-    # If set, the dashboard topbar shows a "← back to lobby" link pointing
-    # here. Empty = this instance acts as its own lobby.
-    lobby_url: str = ""
 
 
 @lru_cache(maxsize=1)

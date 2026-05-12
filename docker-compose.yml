@@ -50,13 +50,10 @@ services:
       SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-5}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
-      # Server identity (sharding — see docs/SHARDING.md)
+      # Server identity
       SERVER_NAME: ${SERVER_NAME:-s1}
       SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-the first universe}
       SERVER_MAX_USERS: ${SERVER_MAX_USERS:-5000}
-      IS_LOBBY: ${IS_LOBBY:-false}
-      LOBBY_URL: ${LOBBY_URL:-}
-      LOBBY_SERVERS: ${LOBBY_SERVERS:-}
     ports:
       - "${HOST_PORT:-9931}:8000"
     restart: unless-stopped

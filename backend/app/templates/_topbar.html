@@ -27,7 +27,6 @@
         <a href="/leaderboard">ranking</a>
         <a href="/alliances">alliances</a>
         {% if is_admin is defined and is_admin %}<a href="/admin" class="nav-admin">admin</a>{% endif %}
-        {% if lobby_url is defined and lobby_url %}<a href="{{ lobby_url }}">&larr; lobby</a>{% endif %}
         <a href="/logout" class="nav-danger">logout</a>
       </nav>
     </details>
