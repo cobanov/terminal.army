@@ -35,10 +35,6 @@ def _sync_url() -> str:
     return raw.replace("+asyncpg", "").replace("+aiosqlite", "")
 
 
-def _has_table(engine, name: str) -> bool:
-    return inspect(engine).has_table(name)
-
-
 def main() -> int:
     engine = create_engine(_sync_url())
     with engine.connect() as conn:
