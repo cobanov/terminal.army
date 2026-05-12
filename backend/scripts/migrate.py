@@ -18,38 +18,46 @@ Called from the container CMD before terminal-army-server boots.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import inspect
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
-def _sync_url() -> str:
+def _async_url() -> str:
     raw = os.environ.get("DATABASE_URL", "")
     if not raw:
         print("DATABASE_URL is unset", file=sys.stderr)
         sys.exit(2)
-    # Alembic uses sync drivers; flip the +asyncpg suffix to plain
-    # postgresql so the sync engine can connect.
-    return raw.replace("+asyncpg", "").replace("+aiosqlite", "")
+    return raw
+
+
+async def _probe() -> tuple[bool, bool]:
+    engine = create_async_engine(_async_url())
+    try:
+        async with engine.connect() as conn:
+            def _check(sync_conn: object) -> tuple[bool, bool]:
+                insp = inspect(sync_conn)
+                return insp.has_table("alembic_version"), insp.has_table("users")
+
+            return await conn.run_sync(_check)
+    finally:
+        await engine.dispose()
 
 
 def main() -> int:
-    engine = create_engine(_sync_url())
-    with engine.connect() as conn:
-        has_alembic = inspect(conn).has_table("alembic_version")
-        # `users` is a stable canary — present in every revision from
-        # the initial migration onward.
-        has_app = inspect(conn).has_table("users")
+    has_alembic, has_app = asyncio.run(_probe())
 
     if has_alembic:
-        print("[migrate] alembic_version found → upgrade head")
+        print("[migrate] alembic_version found -> upgrade head")
         return subprocess.call(["alembic", "upgrade", "head"])
     if has_app:
-        print("[migrate] existing schema without alembic → stamp head")
+        print("[migrate] existing schema without alembic -> stamp head")
         return subprocess.call(["alembic", "stamp", "head"])
-    print("[migrate] fresh database → upgrade head")
+    print("[migrate] fresh database -> upgrade head")
     return subprocess.call(["alembic", "upgrade", "head"])
 
 

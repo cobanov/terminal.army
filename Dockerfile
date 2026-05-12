@@ -47,4 +47,4 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 # helper distinguishes three cases (fresh DB, legacy create_all DB,
 # already under alembic) so an existing deployment promoted to
 # migrations doesn't re-run init DDL. See backend/scripts/migrate.py.
-CMD ["sh", "-c", "python -m backend.scripts.migrate && terminal-army-server --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python -m backend.scripts.migrate && tarmy-server --host 0.0.0.0 --port 8000"]
