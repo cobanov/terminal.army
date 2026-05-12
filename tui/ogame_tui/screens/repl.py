@@ -772,7 +772,8 @@ class ReplScreen(Screen):
                 f"M {_fmt_int(p['resources_metal'])}\n",
                 style="dim",
             )
-        body.append("\n[dim]switch:[/dim] [yellow]/switch <id>[/yellow]\n")
+        body.append("\nswitch: ", style="dim")
+        body.append("/switch <id>\n", style="yellow")
 
         # QUEUE — compact
         queue = self._queue_cache
