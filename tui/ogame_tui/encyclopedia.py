@@ -74,8 +74,7 @@ _BUILDINGS: dict[str, Entry] = {
         "crawler",
         _B,
         "Crawler",
-        "Mining drone. Each crawler adds +0.02% to all mine output, "
-        "capped at +50%.",
+        "Mining drone. Each crawler adds +0.02% to all mine output, capped at +50%.",
         "/resources",
     ),
     "metal_storage": Entry(

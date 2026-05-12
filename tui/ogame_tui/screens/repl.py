@@ -724,12 +724,14 @@ def _nav_text() -> Text:
     """
     sections: list[tuple[str, str, list[str]]] = [
         (
-            "PLANET", "green",
+            "PLANET",
+            "green",
             ["/planet", "/resources", "/facilities", "/upgrade", "/queue", "/cancel"],
         ),
         ("RESEARCH", "magenta", ["/research", "/tree"]),
         (
-            "FLEET", "cyan",
+            "FLEET",
+            "cyan",
             [
                 "/ships",
                 "/build",
@@ -2535,15 +2537,13 @@ class ReplScreen(Screen):
             return
         if len(args) < 2:
             self._log.write(
-                "[red]usage:[/red] /build <ship_type> <count>  "
-                "[dim](buildings? use /upgrade)[/dim]"
+                "[red]usage:[/red] /build <ship_type> <count>  [dim](buildings? use /upgrade)[/dim]"
             )
             return
         ship = args[0].lower()
         if ship in _BUILDING_KEYS:
             self._log.write(
-                f"[red]{ship} is a building.[/red] "
-                f"Use [yellow]/upgrade {ship}[/yellow]."
+                f"[red]{ship} is a building.[/red] Use [yellow]/upgrade {ship}[/yellow]."
             )
             return
         try:
