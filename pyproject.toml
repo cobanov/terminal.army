@@ -50,7 +50,7 @@ tarmy = "terminal_army.cli:main"
 tarmy-server = "terminal_army.cli:server_main"
 
 [project.urls]
-Repository = "https://github.com/cobanov/space-galactic-tui"
+Repository = "https://github.com/cobanov/terminal.army"
 
 [build-system]
 requires = ["hatchling"]

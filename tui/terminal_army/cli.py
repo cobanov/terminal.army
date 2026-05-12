@@ -222,7 +222,7 @@ def _get_or_acquire_credentials(backend_url: str) -> str:
     return new_token
 
 
-_GIT_INSTALL_URL = "git+https://github.com/cobanov/space-galactic-tui.git"
+_GIT_INSTALL_URL = "git+https://github.com/cobanov/terminal.army.git"
 _PACKAGE_NAME = "terminal-army"
 
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Sakusen 策戦 — tek komutluk kurulum (uv + sakusen)
+# terminal.army — tek komutluk kurulum (uv + tarmy)
 #
 # Kullanim (public repo):
-#   curl -fsSL https://raw.githubusercontent.com/cobanov/space-galactic-tui/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/cobanov/terminal.army/main/scripts/install.sh | sh
 #
 # Kullanim (private repo, SSH ile):
-#   OGAME_REPO="git+ssh://git@github.com/cobanov/space-galactic-tui.git" sh install.sh
+#   OGAME_REPO="git+ssh://git@github.com/cobanov/terminal.army.git" sh install.sh
 #
 # Env override:
 #   OGAME_REPO  : git URL (default: HTTPS public repo URL)
@@ -14,7 +14,7 @@
 
 set -eu
 
-OGAME_REPO="${OGAME_REPO:-git+https://github.com/cobanov/space-galactic-tui.git}"
+OGAME_REPO="${OGAME_REPO:-git+https://github.com/cobanov/terminal.army.git}"
 OGAME_REF="${OGAME_REF:-main}"
 OGAME_PY="${OGAME_PY:-3.12}"
 

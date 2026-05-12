@@ -25,7 +25,7 @@ It is completely free. It is a fun project. I wanted to write OGame in Python an
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install and run
-uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"
+uv tool install --python 3.12 "git+https://github.com/cobanov/terminal.army.git"
 tarmy
 ```
 
@@ -75,4 +75,4 @@ Free, no ads, no premium currency, no pay to win. If the server is up and you ca
 
 ## Issues
 
-[github.com/cobanov/space-galactic-tui/issues](https://github.com/cobanov/space-galactic-tui/issues)
+[github.com/cobanov/terminal.army/issues](https://github.com/cobanov/terminal.army/issues)

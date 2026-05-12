@@ -31,7 +31,7 @@ Tunnel or Tailscale.)
 ## 2. Clone + configure
 
 ```bash
-git clone git@github.com:cobanov/space-galactic-tui.git /opt/terminal-army
+git clone git@github.com:cobanov/terminal.army.git /opt/terminal-army
 cd /opt/terminal-army
 cp .env.example .env
 ```
