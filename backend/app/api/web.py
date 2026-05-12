@@ -906,12 +906,6 @@ async def alliance_request_reject_form(
     applicant = u_res.scalar_one_or_none()
     if applicant is None:
         return RedirectResponse(f"/alliances/{a.tag}?err=User+not+found", status_code=303)
-    await db.execute(
-        select(AllianceJoinRequest).where(
-            AllianceJoinRequest.alliance_id == a.id,
-            AllianceJoinRequest.user_id == applicant.id,
-        )
-    )
     r_res = await db.execute(
         select(AllianceJoinRequest).where(
             AllianceJoinRequest.alliance_id == a.id,
