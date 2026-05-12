@@ -45,6 +45,31 @@ _FACILITY_KEYS = [
     "terraformer",
 ]
 _BUILDING_KEYS = _RESOURCE_KEYS + _FACILITY_KEYS
+_SHIP_KEYS = [
+    "small_cargo",
+    "large_cargo",
+    "light_fighter",
+    "heavy_fighter",
+    "cruiser",
+    "battleship",
+    "colony_ship",
+    "recycler",
+    "espionage_probe",
+    "bomber",
+    "destroyer",
+    "battlecruiser",
+]
+_DEFENSE_KEYS = [
+    "rocket_launcher",
+    "light_laser",
+    "heavy_laser",
+    "gauss_cannon",
+    "ion_cannon",
+    "plasma_turret",
+    "small_shield_dome",
+    "large_shield_dome",
+]
+_MISSION_KEYS = ["transport", "attack", "espionage", "deploy", "colonize", "recycle"]
 _TECH_KEYS = [
     "energy",
     "laser",
@@ -279,6 +304,74 @@ def suggestions_for(
 
             keys = _enc.suggestions(arg_l, limit=20) if arg_l else list(_enc.ALL.keys())[:20]
             return [(f"/info {k}", _make_label(f"/info {k}", _enc.ALL[k].category)) for k in keys]
+        if cmd_l in ("/build", "/bs"):
+            # First arg = ship type. After the type is fully typed plus a
+            # space, we stop suggesting and the user types the count.
+            if " " in arg:
+                return []
+            return [
+                (f"/build {k} ", _make_label(f"/build {k} <count>", "build ship"))
+                for k in _SHIP_KEYS
+                if k.startswith(arg_l)
+            ]
+        if cmd_l in ("/defend", "/dfd"):
+            if " " in arg:
+                return []
+            return [
+                (f"/defend {k} ", _make_label(f"/defend {k} <count>", "build defense"))
+                for k in _DEFENSE_KEYS
+                if k.startswith(arg_l)
+            ]
+        if cmd_l == "/send":
+            if " " in arg:
+                return []
+            return [
+                (f"/send {m} ", _make_label(f"/send {m} <coord>", "fleet mission"))
+                for m in _MISSION_KEYS
+                if m.startswith(arg_l)
+            ]
+        if cmd_l == "/options":
+            # /options --theme <name>
+            stripped = arg.split()
+            if stripped and stripped[0] in ("--theme", "--t"):
+                themes = [
+                    "textual-dark",
+                    "textual-light",
+                    "nord",
+                    "gruvbox",
+                    "dracula",
+                    "tokyo-night",
+                    "monokai",
+                    "flexoki",
+                    "catppuccin-mocha",
+                    "catppuccin-frappe",
+                    "catppuccin-macchiato",
+                    "catppuccin-latte",
+                    "solarized-dark",
+                    "solarized-light",
+                    "rose-pine",
+                    "rose-pine-moon",
+                    "rose-pine-dawn",
+                    "atom-one-dark",
+                    "atom-one-light",
+                    "ansi-dark",
+                    "ansi-light",
+                ]
+                prefix = stripped[1].lower() if len(stripped) > 1 else ""
+                return [
+                    (
+                        f"/options --theme {t}",
+                        _make_label(f"/options --theme {t}", "switch theme"),
+                    )
+                    for t in themes
+                    if t.startswith(prefix)
+                ]
+            return [
+                (
+                    "/options --theme ",
+                    _make_label("/options --theme <name>", "switch color theme"),
+                )
+            ]
         if cmd_l in ("/inbox", "/ib", "/in") and players:
             # Suggest only first token (username); ignore second token cases
             if " " in arg:
