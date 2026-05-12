@@ -508,6 +508,30 @@ def _remaining_str(iso_str: str) -> str:
     return f"{h}h{m:02d}m"
 
 
+def _progress_fraction(started_iso: str, finished_iso: str) -> float:
+    """0.0 → not started, 1.0 → done. Clamped."""
+    try:
+        started = _parse_utc(started_iso)
+        finished = _parse_utc(finished_iso)
+    except Exception:
+        return 0.0
+    total = (finished - started).total_seconds()
+    if total <= 0:
+        return 1.0
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    if elapsed <= 0:
+        return 0.0
+    if elapsed >= total:
+        return 1.0
+    return elapsed / total
+
+
+def _progress_bar(frac: float, width: int = 10) -> tuple[str, str]:
+    """Return (filled, empty) two-char strings ready for styled append."""
+    filled = max(0, min(width, int(round(frac * width))))
+    return "█" * filled, "░" * (width - filled)
+
+
 def _now_local_hhmmss() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
@@ -1109,7 +1133,12 @@ class ReplScreen(Screen):
                 body.append(f"  #{q['id']} ", style="cyan")
                 body.append(f"{q['item_key']}\n", style="dim")
                 rem_style = "green" if remaining != "done" else "dim"
-                body.append(f"    {remaining}\n", style=rem_style)
+                frac = _progress_fraction(q["started_at"], q["finished_at"])
+                filled, empty = _progress_bar(frac, width=10)
+                body.append("    ")
+                body.append(filled, style="green")
+                body.append(empty, style="dim")
+                body.append(f"  {remaining}\n", style=rem_style)
 
         # === 3) MISSIONS — active fleet operations (mine outbound + hostile inbound) ===
         if self._fleets_cache or self._incoming_cache:
