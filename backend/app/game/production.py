@@ -98,6 +98,15 @@ def compute_planet_production(
     deut_mine_raw = deuterium_synthesizer_production(deut_lvl, temp_max, speed, plasma)
     net_deut_mine = deut_mine_raw * production_factor
 
+    # Source: https://ogame.fandom.com/wiki/Crawler — +0.02% mine output per
+    # crawler, cap +50%. Applies to mine output only, not base passive.
+    crawler_count = buildings.get(BuildingType.CRAWLER, 0)
+    crawler_bonus = min(0.5, crawler_count * 0.0002)
+    if crawler_bonus > 0:
+        net_metal_mine *= 1 + crawler_bonus
+        net_crystal_mine *= 1 + crawler_bonus
+        net_deut_mine *= 1 + crawler_bonus
+
     net_metal = base_m + net_metal_mine
     net_crystal = base_c + net_crystal_mine
     net_deuterium = base_d + net_deut_mine - fusion_deut

@@ -16,16 +16,45 @@ class BuildingType(StrEnum):
     SOLAR_PLANT = "solar_plant"
     FUSION_REACTOR = "fusion_reactor"
     SOLAR_SATELLITE = "solar_satellite"
-    ROBOTICS_FACTORY = "robotics_factory"
-    SHIPYARD = "shipyard"
-    RESEARCH_LAB = "research_lab"
+    CRAWLER = "crawler"
     METAL_STORAGE = "metal_storage"
     CRYSTAL_STORAGE = "crystal_storage"
     DEUTERIUM_TANK = "deuterium_tank"
-    NANITE_FACTORY = "nanite_factory"
-    MISSILE_SILO = "missile_silo"
+    ROBOTICS_FACTORY = "robotics_factory"
+    SHIPYARD = "shipyard"
+    RESEARCH_LAB = "research_lab"
     ALLIANCE_DEPOT = "alliance_depot"
+    MISSILE_SILO = "missile_silo"
+    NANITE_FACTORY = "nanite_factory"
     TERRAFORMER = "terraformer"
+
+
+# Source: https://ogame.fandom.com/wiki/Buildings
+# OGame splits the planet's structure menu into two tabs: Resources (mines,
+# energy, storage, crawlers) and Facilities (everything else). Order here
+# matches the order we display in the UI.
+RESOURCE_BUILDINGS: tuple[BuildingType, ...] = (
+    BuildingType.METAL_MINE,
+    BuildingType.CRYSTAL_MINE,
+    BuildingType.DEUTERIUM_SYNTHESIZER,
+    BuildingType.SOLAR_PLANT,
+    BuildingType.FUSION_REACTOR,
+    BuildingType.SOLAR_SATELLITE,
+    BuildingType.CRAWLER,
+    BuildingType.METAL_STORAGE,
+    BuildingType.CRYSTAL_STORAGE,
+    BuildingType.DEUTERIUM_TANK,
+)
+
+FACILITY_BUILDINGS: tuple[BuildingType, ...] = (
+    BuildingType.ROBOTICS_FACTORY,
+    BuildingType.SHIPYARD,
+    BuildingType.RESEARCH_LAB,
+    BuildingType.ALLIANCE_DEPOT,
+    BuildingType.MISSILE_SILO,
+    BuildingType.NANITE_FACTORY,
+    BuildingType.TERRAFORMER,
+)
 
 
 BUILDING_LABELS: dict[BuildingType, str] = {
@@ -35,6 +64,7 @@ BUILDING_LABELS: dict[BuildingType, str] = {
     BuildingType.SOLAR_PLANT: "Solar Plant",
     BuildingType.FUSION_REACTOR: "Fusion Reactor",
     BuildingType.SOLAR_SATELLITE: "Solar Satellite",
+    BuildingType.CRAWLER: "Crawler",
     BuildingType.ROBOTICS_FACTORY: "Robotics Factory",
     BuildingType.SHIPYARD: "Shipyard",
     BuildingType.RESEARCH_LAB: "Research Laboratory",
@@ -213,6 +243,8 @@ BUILDING_COSTS: dict[BuildingType, tuple[int, int, int, float]] = {
     BuildingType.SOLAR_PLANT: (75, 30, 0, 1.5),
     BuildingType.FUSION_REACTOR: (900, 360, 180, 1.8),
     BuildingType.SOLAR_SATELLITE: (0, 2000, 500, 1.0),  # sabit cost per unit
+    # Source: https://ogame.fandom.com/wiki/Crawler — fixed cost per unit
+    BuildingType.CRAWLER: (2000, 2000, 1000, 1.0),
     BuildingType.ROBOTICS_FACTORY: (400, 120, 200, 2.0),
     BuildingType.SHIPYARD: (400, 200, 100, 2.0),
     BuildingType.RESEARCH_LAB: (200, 400, 200, 2.0),
