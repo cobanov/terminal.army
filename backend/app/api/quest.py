@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from backend.app.deps import CurrentUser, DBSession
-from backend.app.services.quests import user_quest_status
+from backend.app.services.quests import Quest, user_quest_status
 
 router = APIRouter(tags=["quest"])
 
@@ -20,24 +20,22 @@ class QuestRead(BaseModel):
 class QuestStatus(BaseModel):
     completed: list[QuestRead]
     current: QuestRead | None
+    upcoming: list[QuestRead]
     total: int
     done_count: int
+
+
+def _q(q: Quest) -> QuestRead:
+    return QuestRead(id=q.id, title=q.title, hint=q.hint)
 
 
 @router.get("/quests", response_model=QuestStatus)
 async def get_quests(user: CurrentUser, db: DBSession) -> QuestStatus:
     status = await user_quest_status(db, user.id)
     return QuestStatus(
-        completed=[QuestRead(id=q.id, title=q.title, hint=q.hint) for q in status["completed"]],
-        current=(
-            QuestRead(
-                id=status["current"].id,
-                title=status["current"].title,
-                hint=status["current"].hint,
-            )
-            if status["current"]
-            else None
-        ),
+        completed=[_q(q) for q in status["completed"]],
+        current=_q(status["current"]) if status["current"] else None,
+        upcoming=[_q(q) for q in status.get("upcoming", [])],
         total=status["total"],
         done_count=status["done_count"],
     )

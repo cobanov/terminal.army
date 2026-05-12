@@ -973,7 +973,7 @@ class ReplScreen(Screen):
         body = Text()
 
         # Set of planet ids that have an incoming hostile fleet — drives the
-        # red blink in the PLANETS list.
+        # red blink in the PLANETS list. The detailed row stays in MISSIONS.
         hostile_planet_ids: set[int] = {
             inc["target_planet_id"] for inc in self._incoming_cache if inc.get("is_hostile")
         }
@@ -1007,31 +1007,11 @@ class ReplScreen(Screen):
         body.append("\nswitch: ", style="dim")
         body.append("/switch <#|CODE|name>\n", style="yellow")
 
-        # Incoming alert lives with PLANETS — same conceptual surface
-        # (something is happening to my planets).
-        if self._incoming_cache:
-            body.append(f"\nINCOMING ({len(self._incoming_cache)})\n", style="bold red")
-            for inc in self._incoming_cache[:5]:
-                hostile = inc.get("is_hostile")
-                head_style = "bold red" if hostile else "yellow"
-                arrow = "⚔" if hostile else "→"
-                body.append(f"  {arrow} ", style=head_style)
-                body.append(f"{inc['mission']}", style=head_style)
-                body.append(" from ", style="dim")
-                body.append(f"{inc['sender_username']}\n", style="bold")
-                body.append(
-                    f"     → {inc['target_galaxy']}:{inc['target_system']}:{inc['target_position']}  "
-                    f"{_remaining_str(inc['arrival_at'])}\n",
-                    style="dim",
-                )
-            if len(self._incoming_cache) > 5:
-                body.append(f"  +{len(self._incoming_cache) - 5} more\n", style="dim")
-
-        # === 2) QUEUES (build queue + my outgoing fleets) ===
+        # === 2) QUEUES — build/research/ship/defense queue items ===
         queue = self._queue_cache
         body.append(f"\nQUEUES ({len(queue)}/5)\n", style="bold yellow")
         if not queue:
-            body.append("  build: empty\n", style="dim")
+            body.append("  empty\n", style="dim")
         else:
             for q in queue:
                 remaining = _remaining_str(q["finished_at"])
@@ -1039,32 +1019,54 @@ class ReplScreen(Screen):
                 body.append(f"{q['item_key']}\n", style="dim")
                 rem_style = "green" if remaining != "done" else "dim"
                 body.append(f"    {remaining}\n", style=rem_style)
-        # Outbound fleets sit right under the build queue: both are "things
-        # I started that finish in the future".
-        if self._fleets_cache:
-            body.append(f"  fleets ({len(self._fleets_cache)})\n", style="bold cyan")
+
+        # === 3) MISSIONS — active fleet operations (mine outbound + hostile inbound) ===
+        if self._fleets_cache or self._incoming_cache:
+            total_count = len(self._fleets_cache) + len(self._incoming_cache)
+            body.append(f"\nMISSIONS ({total_count})\n", style="bold yellow")
+            # Incoming first because attacks are time-critical.
+            for inc in self._incoming_cache[:5]:
+                hostile = inc.get("is_hostile")
+                head_style = "bold red" if hostile else "yellow"
+                arrow = "⚔" if hostile else "→"
+                body.append(f"  {arrow} {inc['mission']}", style=head_style)
+                body.append(" from ", style="dim")
+                body.append(f"{inc['sender_username']}\n", style="bold")
+                body.append(
+                    f"    → {inc['target_galaxy']}:{inc['target_system']}:{inc['target_position']}  "
+                    f"{_remaining_str(inc['arrival_at'])}\n",
+                    style="dim",
+                )
+            if len(self._incoming_cache) > 5:
+                body.append(f"  +{len(self._incoming_cache) - 5} more inbound\n", style="dim")
             for f in self._fleets_cache[:5]:
                 arr = _remaining_str(f["arrival_at"])
-                body.append(f"  {f['mission']}", style="cyan")
+                body.append(f"  → {f['mission']}", style="cyan")
                 body.append(
                     f" → {f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
                     style="dim",
                 )
                 body.append(f"    {f['status']}  {arr}\n", style="dim")
             if len(self._fleets_cache) > 5:
-                body.append(f"  +{len(self._fleets_cache) - 5} more\n", style="dim")
+                body.append(f"  +{len(self._fleets_cache) - 5} more outbound\n", style="dim")
+        else:
+            body.append("\nMISSIONS\n", style="bold yellow")
+            body.append("  no active fleets\n", style="dim")
 
-        # === 3) MISSIONS (onboarding quest) ===
-        q = self._quest_cache
-        if q and q.get("current"):
-            current = q["current"]
+        # === 4) QUESTS — onboarding progression ===
+        qd = self._quest_cache
+        if qd:
             body.append(
-                f"\nMISSIONS [{q['done_count']}/{q['total']}]\n", style="bold green"
+                f"\nQUESTS [{qd['done_count']}/{qd['total']}]\n", style="bold green"
             )
-            body.append(f"  {current['title']}\n", style="cyan")
-            body.append("  /quest for the full list\n", style="dim")
+            cur = qd.get("current")
+            if cur is None:
+                body.append("  all complete ✓\n", style="dim green")
+            else:
+                body.append(f"  ▸ {cur['title']}\n", style="cyan")
+                body.append("  /quest for more\n", style="dim")
 
-        # === 4) MESSAGES ===
+        # === 5) MESSAGES ===
         body.append("\nMESSAGES  ", style="bold yellow")
         if self._unread_count == 0:
             body.append("(none)\n", style="dim")
@@ -1308,31 +1310,50 @@ class ReplScreen(Screen):
         return self._cached_user_id
 
     async def _cmd_quest(self, args: list[str]) -> None:
-        """Show the onboarding quest list with progress."""
+        """Onboarding quest list: last 3 done + current + next 6 pending."""
         try:
             data = await self.app.client.quests()
         except APIError as exc:
             self._log.write(f"[red]{exc.detail}[/red]")
             return
         header = Text()
-        header.append("━━━ Onboarding quests ", style="bold yellow")
+        header.append("━━━ Quests ", style="bold yellow")
         header.append(f"{data['done_count']}/{data['total']}", style="bold green")
         header.append(" ━━━", style="bold yellow")
         self._log.write(header)
-        for q in data.get("completed", []):
-            line = Text()
-            line.append("  ✓ ", style="bold green")
-            line.append(q["title"], style="dim")
-            self._log.write(line)
+
+        completed = data.get("completed", [])
+        recent = completed[-3:]
+        if recent:
+            if len(completed) > 3:
+                self._log.write(f"  [dim]... {len(completed) - 3} earlier completed ...[/dim]")
+            for q in recent:
+                line = Text()
+                line.append("  ✓ ", style="bold green")
+                line.append(q["title"], style="dim")
+                self._log.write(line)
+
         cur = data.get("current")
         if cur is None:
             self._log.write("  [bold green]all complete — well done, commander.[/bold green]")
             return
+
+        # Current + the next 6 upcoming = 7 ahead total.
         line = Text()
         line.append("  ▸ ", style="bold yellow")
         line.append(cur["title"], style="bold yellow")
         self._log.write(line)
         self._log.write(f"    [dim]{cur['hint']}[/dim]")
+
+        upcoming = data.get("upcoming", [])[:6]
+        for q in upcoming:
+            line = Text()
+            line.append("  · ", style="dim")
+            line.append(q["title"], style="dim")
+            self._log.write(line)
+        remaining = len(data.get("upcoming", [])) - len(upcoming)
+        if remaining > 0:
+            self._log.write(f"  [dim]+{remaining} more locked[/dim]")
 
     async def _cmd_info(self, args: list[str]) -> None:
         """Encyclopedia lookup for any building / tech / ship / defense."""

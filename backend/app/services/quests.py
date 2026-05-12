@@ -253,19 +253,31 @@ async def _check_quest(db: AsyncSession, user_id: int, kind: str, params: dict[s
 
 
 async def user_quest_status(db: AsyncSession, user_id: int) -> dict:
-    """Return {completed: [...], current: Quest | None, total: int}."""
+    """Return completed + current + upcoming quest split.
+
+    Quests are evaluated in declared order. The first not-yet-satisfied
+    one is `current`; everything before is `completed`; everything after
+    is `upcoming` (still locked, shown so the player can preview the
+    next few milestones).
+    """
     completed: list[Quest] = []
     current: Quest | None = None
+    upcoming: list[Quest] = []
+    found_pending = False
     for quest, kind, params in _QUEST_DEFS:
+        if found_pending:
+            upcoming.append(quest)
+            continue
         ok = await _check_quest(db, user_id, kind, params)
         if ok:
             completed.append(quest)
         else:
             current = quest
-            break
+            found_pending = True
     return {
         "completed": completed,
         "current": current,
+        "upcoming": upcoming,
         "total": len(_QUEST_DEFS),
         "done_count": len(completed),
     }
