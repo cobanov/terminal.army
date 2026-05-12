@@ -13,10 +13,11 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
+from textual.screen import ModalScreen, Screen
 from textual.suggester import Suggester
-from textual.widgets import Input, OptionList, RichLog, Static
+from textual.widgets import Input, OptionList, RichLog, SelectionList, Static
 from textual.widgets.option_list import Option
+from textual.widgets.selection_list import Selection
 
 from ogame_tui.client import APIError
 
@@ -281,6 +282,21 @@ def suggestions_for(
                 for u in players
                 if u.lower().startswith(arg_l)
             ]
+        if cmd_l == "/alliance":
+            # /alliance --requests / --approve <user> / --reject <user> /
+            # --withdraw — flag suggestions after the umbrella command.
+            flags = [
+                ("--requests", "founder: list pending applicants"),
+                ("--approve ", "founder: approve a join request"),
+                ("--reject ", "founder: reject a join request"),
+                ("--withdraw", "withdraw your own pending request"),
+            ]
+            out_alliance: list[tuple[str, Text]] = []
+            for flag, desc in flags:
+                if flag.startswith(arg_l):
+                    spec_str = f"/alliance {flag}"
+                    out_alliance.append((spec_str, _make_label(spec_str, desc)))
+            return out_alliance
         if cmd_l in ("/switch", "/sw") and planets:
             if " " in arg:
                 return []
@@ -473,6 +489,94 @@ def _nav_text() -> Text:
     t.append("  Ctrl+L clear log\n", style="dim")
     t.append("  Ctrl+C quit\n", style="dim")
     return t
+
+
+# ---------- Fleet selector modal -----------------------------------------
+class FleetSelectorScreen(ModalScreen[dict[str, int] | None]):
+    """Multi-select picker for ships on the current planet.
+
+    Returns a dict ship_type → count when confirmed (Enter), or None on
+    cancel (Esc). Each selected ship is sent at its full available count;
+    if you need partial counts, pass them as `ship_type:N` args on the
+    original command, bypassing this modal.
+    """
+
+    DEFAULT_CSS = """
+    FleetSelectorScreen {
+        align: center middle;
+    }
+    #fleet-modal {
+        width: 60;
+        height: auto;
+        max-height: 80%;
+        background: $surface;
+        border: heavy $accent;
+        padding: 1 2;
+    }
+    #fleet-modal > #fleet-header {
+        height: auto;
+        padding-bottom: 1;
+    }
+    #fleet-modal > SelectionList {
+        height: auto;
+        max-height: 18;
+        background: $surface;
+    }
+    #fleet-modal > #fleet-hint {
+        height: auto;
+        padding-top: 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "cancel", priority=True),
+        Binding("enter", "confirm", "confirm", priority=True),
+    ]
+
+    def __init__(self, mission: str, ships: dict[str, int]) -> None:
+        super().__init__()
+        self._mission = mission
+        # Only ship types with at least one unit in stock are offered.
+        self._ships = [(stype, count) for stype, count in ships.items() if count > 0]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="fleet-modal"):
+            yield Static(
+                f"[bold yellow]Select ships for /{self._mission}[/bold yellow]",
+                id="fleet-header",
+            )
+            options = [
+                Selection(f"{stype}  [dim]x {count}[/dim]", stype) for stype, count in self._ships
+            ]
+            yield SelectionList[str](*options, id="fleet-list")
+            yield Static(
+                "[dim]↑↓ navigate · space toggle · enter confirm · esc cancel[/dim]",
+                id="fleet-hint",
+            )
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one("#fleet-list", SelectionList).focus()
+        except Exception:
+            pass
+
+    def action_confirm(self) -> None:
+        try:
+            picker = self.query_one("#fleet-list", SelectionList)
+        except Exception:
+            self.dismiss(None)
+            return
+        selected_types: list[str] = list(picker.selected)
+        if not selected_types:
+            # Nothing chosen → treat as cancel for safety.
+            self.dismiss(None)
+            return
+        counts: dict[str, int] = dict(self._ships)
+        result = {st: counts[st] for st in selected_types if st in counts}
+        self.dismiss(result)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 # ---------- Screen --------------------------------------------------------
@@ -2096,8 +2200,10 @@ class ReplScreen(Screen):
     ) -> None:
         """Generic: /<cmd> <g>:<s>:<p> [<ship>:<n>...] [cargo M/C/D]
 
-        For /espionage: probes auto-added. For /attack: requires explicit ships.
-        For /transport: ships + cargo flags.
+        Ships can be given inline (`light_fighter:50 cruiser:5`) or, if
+        omitted, the interactive multi-select modal opens — arrow keys
+        navigate, space toggles, enter confirms. Selected types are sent
+        at their full available count.
         """
         pid = self._require_planet()
         if pid is None:
@@ -2127,6 +2233,23 @@ class ReplScreen(Screen):
             elif ":" in token:
                 stype, cnt = token.split(":", 1)
                 ships[stype.lower()] = int(cnt)
+
+        # No inline ships passed → open the interactive selector populated
+        # from the origin planet's current stock. Espionage's auto-probe
+        # bypasses the selector since the mission already has a sensible
+        # default fleet.
+        if not ships and mission != "espionage":
+            try:
+                stock_data = await self.app.client.list_ships(pid)
+            except APIError as exc:
+                self._log.write(f"[red]{exc.detail}[/red]")
+                return
+            stock = {s["ship_type"]: s["count"] for s in stock_data["ships"]}
+            picked = await self.app.push_screen_wait(FleetSelectorScreen(mission, stock))
+            if not picked:
+                self._log.write("[dim]fleet send cancelled[/dim]")
+                return
+            ships = picked
 
         if mission == "espionage" and "espionage_probe" not in ships:
             ships["espionage_probe"] = 1
@@ -2164,16 +2287,20 @@ class ReplScreen(Screen):
         await self._send_fleet_generic(args, "espionage", default_ships={"espionage_probe": 1})
 
     async def _cmd_attack(self, args: list[str]) -> None:
-        if len(args) < 2:
-            self._log.write("[red]usage:[/red] /attack <g>:<s>:<p> <ship>:<n> [<ship>:<n> ...]")
+        if not args:
+            self._log.write(
+                "[red]usage:[/red] /attack <g>:<s>:<p> [<ship>:<n>...]  "
+                "[dim](no ships → opens picker)[/dim]"
+            )
             return
         await self._send_fleet_generic(args, "attack")
 
     async def _cmd_transport(self, args: list[str]) -> None:
-        if len(args) < 2:
+        if not args:
             self._log.write(
-                "[red]usage:[/red] /transport <g>:<s>:<p> small_cargo:<n> "
-                "[m=<metal> c=<crystal> d=<deuterium>]"
+                "[red]usage:[/red] /transport <g>:<s>:<p> [<ship>:<n>...] "
+                "[m=<metal> c=<crystal> d=<deuterium>]  "
+                "[dim](no ships → opens picker)[/dim]"
             )
             return
         await self._send_fleet_generic(args, "transport")
