@@ -1314,7 +1314,7 @@ class ReplScreen(Screen):
                 body.append(f"{q['item_key']}\n", style="green")
                 frac = _progress_fraction(q["started_at"], q["finished_at"])
                 filled, empty = _progress_bar(frac, width=12)
-                pct = int(round(frac * 100))
+                pct = round(frac * 100)
                 body.append("    ")
                 body.append(filled, style="green")
                 body.append(empty, style="dim")
