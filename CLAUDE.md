@@ -266,7 +266,6 @@ ogame/
 ├── .env.example
 ├── README.md
 ├── CLAUDE.md
-├── tasks.md
 ├── alembic/
 │   └── versions/
 ├── backend/
@@ -377,7 +376,7 @@ Bir oyuncu birden fazla universe'e kayit olabilir (her birinde ayri ilerleme). M
 
 ## Faz planlamasi
 
-Detaylar `tasks.md` icinde. Faz hiyerarsisi:
+Faz hiyerarsisi (her birinin uzerine gelistirme yapilir):
 
 1. Faz 0: Proje iskeleti
 2. Faz 1: Auth + universe + ilk gezegen yaratimi
@@ -388,4 +387,6 @@ Detaylar `tasks.md` icinde. Faz hiyerarsisi:
 7. Faz 6: TUI istemci
 8. Faz 7+: Filo, savas, ittifak (post-MVP)
 
-Her faz icin tasks.md'de cikti, kabul kriterleri ve test gereksinimleri var. Sirayla ilerle, faz sonunda demo edebilecek durumda olmali.
+Faz 0-6 MVP icin tamamlandi. Sonraki adimlar (filo, savas, ittifaklar) icin
+yine Fandom Wiki'yi tek kaynak olarak kullan, sirayla ilerle, her faz sonunda
+demo edebilecek durumda olmali.
