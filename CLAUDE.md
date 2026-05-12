@@ -259,7 +259,7 @@ Saniyeye cevirip queue'da `finished_at` olarak saklarsin.
 ## Project layout
 
 ```
-ogame/
+terminal-army/
 ├── pyproject.toml
 ├── docker-compose.yml
 ├── alembic.ini
@@ -309,8 +309,7 @@ ogame/
 │   │   └── scheduler.py            # APScheduler: queue completion
 │   └── tests/
 ├── tui/
-│   ├── pyproject.toml              # Ayri paket
-│   └── ogame_tui/
+│   └── terminal_army/
 │       ├── __main__.py
 │       ├── client.py               # httpx wrapper
 │       ├── app.py                  # Textual App

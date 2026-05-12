@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
 authors = [{ name = "Mert Cobanov", email = "mertcobanov@gmail.com" }]
-keywords = ["ogame", "tui", "game", "fastapi", "textual"]
+keywords = ["tarmy", "tui", "game", "fastapi", "textual", "space-strategy"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -44,8 +44,8 @@ dev = [
 ]
 
 [project.scripts]
-# Short, primary name. Anything else (terminal-army, sakusen, ogame)
-# was retired so a fresh install ships only these two binaries.
+# A fresh install ships only these two binaries; older aliases
+# (terminal-army, etc.) were retired to keep PATH clean on Windows.
 tarmy = "terminal_army.cli:main"
 tarmy-server = "terminal_army.cli:server_main"
 
