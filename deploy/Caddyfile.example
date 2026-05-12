@@ -1,14 +1,14 @@
-# Caddy reverse proxy for sakusen.
+# Caddy reverse proxy for terminal.army.
 #
 # Install:
 #   sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
-#   sudo sed -i "s/SAKUSEN_DOMAIN/<your-domain>/g" /etc/caddy/Caddyfile
+#   sudo sed -i "s/TERMINAL_ARMY_DOMAIN/<your-domain>/g" /etc/caddy/Caddyfile
 #   sudo systemctl reload caddy
 #
 # Caddy will automatically obtain + renew a Let's Encrypt TLS certificate
 # for the domain. The backend stays plain-HTTP on localhost:9931.
 
-SAKUSEN_DOMAIN {
+TERMINAL_ARMY_DOMAIN {
     encode gzip
 
     # Forward everything to the docker-exposed backend
@@ -34,7 +34,7 @@ SAKUSEN_DOMAIN {
     }
 
     log {
-        output file /var/log/caddy/sakusen.log {
+        output file /var/log/caddy/terminal-army.log {
             roll_size 10MiB
             roll_keep 10
         }

@@ -1,14 +1,14 @@
-# Deploying sakusen on a remote host
+# Deploying terminal.army on a remote host
 
-This guide gets you from "blank Linux box" to "sakusen.space serving HTTPS".
+This guide gets you from "blank Linux box" to "terminal.army serving HTTPS".
 
 The backend runs in Docker (compose). What you decide is how the public
 internet reaches port 9931:
 
-- **Caddy** (recommended) — single config file, automatic HTTPS
-- **Cloudflare Tunnel** — no public IP needed, works behind NAT
-- **Tailscale** — friends-only access without DNS at all
-- **Plain HTTP** — for LAN / dev, no TLS
+- **Caddy** (recommended): single config file, automatic HTTPS
+- **Cloudflare Tunnel**: no public IP needed, works behind NAT
+- **Tailscale**: friends-only access without DNS at all
+- **Plain HTTP**: for LAN / dev, no TLS
 
 ---
 
@@ -25,33 +25,33 @@ sudo usermod -aG docker $USER  # log out + back in
 sudo apt install -y caddy
 ```
 
-Plus a DNS A/AAAA record `sakusen.space` → your server IP. (Skip if using
+Plus a DNS A/AAAA record `terminal.army` -> your server IP. (Skip if using
 Tunnel or Tailscale.)
 
 ## 2. Clone + configure
 
 ```bash
-git clone git@github.com:cobanov/space-galactic-tui.git /opt/sakusen
-cd /opt/sakusen
+git clone git@github.com:cobanov/space-galactic-tui.git /opt/terminal-army
+cd /opt/terminal-army
 cp .env.example .env
 ```
 
-Edit `/opt/sakusen/.env`:
+Edit `/opt/terminal-army/.env`. At minimum set the **required** values
+(see `.env.example` for the full list):
 
 ```env
-DATABASE_URL=postgresql+asyncpg://ogame:ogame@postgres:5432/ogame
+ENV=prod
+POSTGRES_PASSWORD=<openssl rand -hex 16>
 JWT_SECRET=<openssl rand -hex 32>
-JWT_EXPIRE_MINUTES=10080
-DEFAULT_UNIVERSE_NAME=Galactica
-DEFAULT_UNIVERSE_SPEED=1
-SCHEDULER_INTERVAL_SECONDS=5
-CORS_ORIGINS=*
+CORS_ORIGINS=https://terminal.army
+HOST_BIND=127.0.0.1
 HOST_PORT=9931
 ADMIN_USERNAME=<your_username>    # this account gets the admin panel
 ```
 
-Make `JWT_SECRET` random and **persistent** — changing it invalidates every
-existing session/token.
+`JWT_SECRET` must be random and **persistent**: changing it invalidates every
+existing session/token. `ENV=prod` enables the production safety gate that
+refuses to boot with placeholder secrets or wildcard CORS.
 
 ## 3. Start
 
@@ -60,58 +60,60 @@ make server-up
 # health: curl http://localhost:9931/health
 ```
 
-Backend is now serving HTTP on the host's port 9931.
+Backend is now serving HTTP on the host's loopback at port 9931
+(because `HOST_BIND=127.0.0.1`). Nothing public yet; pick an ingress
+below.
 
 ## 4. Public ingress
 
-### Option A — Caddy (recommended)
+### Option A: Caddy (recommended)
 
 Drop the bundled config into Caddy and let it auto-issue Let's Encrypt:
 
 ```bash
 sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
-sudo sed -i "s/SAKUSEN_DOMAIN/sakusen.space/g" /etc/caddy/Caddyfile
+sudo sed -i "s/TERMINAL_ARMY_DOMAIN/terminal.army/g" /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
 The bundled config (`deploy/Caddyfile.example`):
 
 ```Caddyfile
-SAKUSEN_DOMAIN {
+TERMINAL_ARMY_DOMAIN {
     encode gzip
     reverse_proxy 127.0.0.1:9931
 }
 ```
 
-That's it — Caddy gets a cert for `sakusen.space`, terminates TLS, and
+That's it: Caddy gets a cert for `terminal.army`, terminates TLS, and
 proxies to docker on 9931. The backend doesn't need any TLS config.
 
-Verify: `curl https://sakusen.space/health` → `{"status":"ok"}`.
+Verify: `curl https://terminal.army/health` -> `{"status":"ok"}`.
 
 Players use:
 
 ```bash
-export SAKUSEN_BACKEND="https://sakusen.space"
-sakusen
+export TA_BACKEND="https://terminal.army"
+tarmy
 ```
 
-### Option B — Cloudflare Tunnel (no public IP)
+### Option B: Cloudflare Tunnel (no public IP)
 
 ```bash
 # On the server:
 curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
 sudo dpkg -i cloudflared.deb
 
-cloudflared tunnel login                 # opens browser
-cloudflared tunnel create sakusen
-cloudflared tunnel route dns sakusen sakusen.space
-cloudflared tunnel run --url http://localhost:9931 sakusen
+cloudflared tunnel login                  # opens browser
+cloudflared tunnel create terminal-army
+cloudflared tunnel route dns terminal-army terminal.army
+cloudflared tunnel run --url http://localhost:9931 terminal-army
 ```
 
 Stick that last line behind systemd for auto-start. TLS is provided by
 Cloudflare's edge.
 
-### Option C — Tailscale (friends-only LAN over WAN)
+### Option C: Tailscale (friends-only LAN over WAN)
 
 ```bash
 sudo tailscale up
@@ -121,23 +123,27 @@ sudo tailscale up
 Players (also on your tailnet):
 
 ```bash
-export SAKUSEN_BACKEND="http://100.x.y.z:9931"
-sakusen
+export TA_BACKEND="http://100.x.y.z:9931"
+tarmy
 ```
 
 No DNS, no TLS hassle. Only the people you invite to the tailnet can reach
-it.
+it. To let tailnet clients see the loopback-bound backend you may need
+`HOST_BIND=0.0.0.0` in `.env` (and a tight firewall, see below).
 
-### Option D — Plain HTTP (LAN / dev)
+### Option D: Plain HTTP (LAN / dev)
 
-Just expose the host's port 9931 to your LAN/router and tell players:
+Set `HOST_BIND=0.0.0.0` in `.env`, expose the host's port 9931 to your
+LAN/router, and tell players:
 
 ```bash
-export SAKUSEN_BACKEND="http://<your-ip>:9931"
-sakusen
+export TA_BACKEND="http://<your-ip>:9931"
+tarmy
 ```
 
-The cookie is configured with `secure=False` so plain-HTTP login works.
+In dev (`ENV=dev`) the cookie is non-Secure so plain-HTTP login works.
+In `ENV=prod` the cookie is always Secure and plain HTTP will not
+preserve sessions; use Caddy / Cloudflare / Tailscale instead.
 
 ---
 
@@ -156,7 +162,7 @@ sudo systemctl enable --now cloudflared
 ## 6. Updates
 
 ```bash
-cd /opt/sakusen
+cd /opt/terminal-army
 git pull
 make server-reload       # = `docker compose up -d backend` (recreates with new image + env)
 ```
@@ -167,13 +173,13 @@ make server-reload       # = `docker compose up -d backend` (recreates with new 
 ## 7. Backups
 
 ```bash
-docker compose exec postgres pg_dump -U ogame ogame > "sakusen-$(date +%Y%m%d).sql"
+docker compose exec postgres pg_dump -U ogame ogame > "terminal-army-$(date +%Y%m%d).sql"
 ```
 
 Cron it nightly:
 
 ```
-0 3 * * * cd /opt/sakusen && docker compose exec -T postgres pg_dump -U ogame ogame | gzip > "/var/backups/sakusen-$(date +\%Y\%m\%d).sql.gz" && find /var/backups -name 'sakusen-*.sql.gz' -mtime +14 -delete
+0 3 * * * cd /opt/terminal-army && docker compose exec -T postgres pg_dump -U ogame ogame | gzip > "/var/backups/terminal-army-$(date +\%Y\%m\%d).sql.gz" && find /var/backups -name 'terminal-army-*.sql.gz' -mtime +14 -delete
 ```
 
 ## 8. Resetting the universe
@@ -187,23 +193,31 @@ make server-up
 
 ## 9. Admin & runtime tuning
 
-Sign in as the user named in `ADMIN_USERNAME` (env var). You'll see:
+The admin account is **not** created by signing up; signup refuses any
+name matching `ADMIN_USERNAME` so nobody can squat it. Bootstrap it
+once after first boot:
+
+```bash
+docker compose exec backend python -m backend.scripts.create_admin
+```
+
+Then sign in as that user. You'll see:
 
 - `[admin]` link in the dashboard topbar
 - A web panel at `/admin` to set universe speed (1..100), tune any user's
   tech levels, planet resources, buildings, ships, defenses, and create new
   planets
 
-The admin panel is the **only** way to tune the universe in production — the
+The admin panel is the **only** way to tune the universe in production: the
 TUI client has no admin commands by design.
 
 ## 10. Firewall
 
 Open inbound:
 
-- **22/tcp** — SSH
-- **80/tcp + 443/tcp** — Caddy (TLS, ACME challenges)
-- 9931 should NOT be exposed publicly when fronted by Caddy/Cloudflare —
+- **22/tcp**: SSH
+- **80/tcp + 443/tcp**: Caddy (TLS, ACME challenges)
+- 9931 should NOT be exposed publicly when fronted by Caddy/Cloudflare;
   Caddy already proxies it locally
 
 ```bash
@@ -218,12 +232,12 @@ sudo ufw enable
 From your laptop:
 
 ```bash
-curl https://sakusen.space/health
+curl https://terminal.army/health
 # {"status":"ok"}
 
-export SAKUSEN_BACKEND="https://sakusen.space"
-sakusen
-# → device flow URL → browser → sign in → TUI starts
+export TA_BACKEND="https://terminal.army"
+tarmy
+# -> device flow URL -> browser -> sign in -> TUI starts
 ```
 
 If the TUI's top bar shows `commander <username>` and the planet card
