@@ -43,5 +43,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)" || exit 1
 
-# terminal-army-server reads DATABASE_URL from env, accepts --host/--port.
-CMD ["terminal-army-server", "--host", "0.0.0.0", "--port", "8000"]
+# Apply pending alembic migrations before booting the server. The
+# helper distinguishes three cases (fresh DB, legacy create_all DB,
+# already under alembic) so an existing deployment promoted to
+# migrations doesn't re-run init DDL. See backend/scripts/migrate.py.
+CMD ["sh", "-c", "python -m backend.scripts.migrate && terminal-army-server --host 0.0.0.0 --port 8000"]
