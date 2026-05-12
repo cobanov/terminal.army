@@ -23,7 +23,10 @@ SAKUSEN_DARK = Theme(
     background="#000000",
     surface="#0a0a0a",
     panel="#0a0a0a",
-    boost="#262626",
+    # `boost` is used as the panel-separator border color in our CSS.
+    # Bumped from #262626 (barely visible against #0a0a0a panels) to a
+    # mid-gray that actually reads as a divider.
+    boost="#525252",
     foreground="#d4d4d4",
     dark=True,
 )
