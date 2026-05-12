@@ -57,7 +57,7 @@ run: migrate seed dev
 
 # --- TUI -------------------------------------------------------------------
 tui:
-	uv run python -m ogame_tui
+	uv run python -m terminal_army
 
 # --- Quality ---------------------------------------------------------------
 test:
