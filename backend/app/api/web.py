@@ -37,6 +37,7 @@ from backend.app.models.planet import Planet
 from backend.app.models.queue import BuildQueue
 from backend.app.models.ship import PlanetDefense
 from backend.app.models.user import User
+from backend.app.presence import online_count
 from backend.app.rate_limit import limiter
 from backend.app.security import create_access_token, decode_token, hash_password, verify_password
 from backend.app.services.resource_service import refresh_planet_resources
@@ -64,7 +65,12 @@ async def _user_from_cookie(token: str | None, db: AsyncSession) -> User | None:
         uid = int(payload["sub"])
     except (ValueError, KeyError):
         return None
-    return await db.get(User, uid)
+    user = await db.get(User, uid)
+    if user is not None:
+        from backend.app.presence import touch
+
+        touch(user.id)
+    return user
 
 
 def _set_auth_cookie(resp: Response, token: str, request: Request | None = None) -> None:
@@ -458,6 +464,7 @@ async def dashboard(
             "logs": logs,
             "unread": unread_count,
             "registered_count": registered_count,
+            "online_count": online_count(),
             "server_name": settings.server_name,
             "server_max_users": settings.server_max_users,
             "is_admin": _is_admin(user),

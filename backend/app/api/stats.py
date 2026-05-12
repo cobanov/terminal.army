@@ -16,6 +16,7 @@ from sqlalchemy import and_, func, select
 from backend.app.config import get_settings
 from backend.app.deps import DBSession
 from backend.app.models.user import User
+from backend.app.presence import online_count
 
 router = APIRouter(tags=["stats"])
 
@@ -25,6 +26,7 @@ class ServerStats(BaseModel):
     description: str
     max_users: int
     registered: int
+    online: int
     active_24h: int
     full: bool
     version: str = "0.1.0"
@@ -51,6 +53,7 @@ async def server_stats(db: DBSession) -> ServerStats:
         description=settings.server_description,
         max_users=settings.server_max_users,
         registered=registered,
+        online=online_count(),
         active_24h=active_24h,
         full=registered >= settings.server_max_users,
     )

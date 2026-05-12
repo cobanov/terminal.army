@@ -123,6 +123,68 @@ async def list_fleets(user: CurrentUser, db: DBSession) -> list[FleetRead]:
     return out
 
 
+class IncomingFleet(BaseModel):
+    """Hostile / external fleet inbound to one of my planets."""
+
+    fleet_id: int
+    mission: str
+    sender_username: str
+    target_planet_id: int
+    target_galaxy: int
+    target_system: int
+    target_position: int
+    arrival_at: datetime
+    is_hostile: bool  # True for attack / espionage
+
+
+@router.get("/fleets/incoming", response_model=list[IncomingFleet])
+async def list_incoming(user: CurrentUser, db: DBSession) -> list[IncomingFleet]:
+    """Fleets owned by OTHER players that target one of MY planets and
+    haven't arrived yet. Used to surface attack/espionage warnings in
+    the TUI right panel."""
+    from backend.app.models.planet import Planet
+    from backend.app.models.user import User
+
+    my_planets_res = await db.execute(select(Planet).where(Planet.owner_user_id == user.id))
+    my_planets = list(my_planets_res.scalars().all())
+    if not my_planets:
+        return []
+
+    coord_to_planet = {(p.galaxy, p.system, p.position): p for p in my_planets}
+
+    res = await db.execute(
+        select(Fleet)
+        .where(
+            Fleet.owner_id != user.id,
+            Fleet.status == FleetStatus.OUTBOUND.value,
+        )
+        .order_by(Fleet.arrival_at)
+    )
+    incoming: list[IncomingFleet] = []
+    hostile_missions = {FleetMission.ATTACK.value, FleetMission.ESPIONAGE.value}
+    for f in res.scalars().all():
+        key = (f.target_galaxy, f.target_system, f.target_position)
+        target_planet = coord_to_planet.get(key)
+        if target_planet is None:
+            continue
+        sender_res = await db.execute(select(User).where(User.id == f.owner_id))
+        sender = sender_res.scalar_one_or_none()
+        incoming.append(
+            IncomingFleet(
+                fleet_id=f.id,
+                mission=f.mission,
+                sender_username=sender.username if sender else "?",
+                target_planet_id=target_planet.id,
+                target_galaxy=f.target_galaxy,
+                target_system=f.target_system,
+                target_position=f.target_position,
+                arrival_at=f.arrival_at,
+                is_hostile=f.mission in hostile_missions,
+            )
+        )
+    return incoming
+
+
 # ----- Reports --------------------------------------------------------------
 class ReportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)

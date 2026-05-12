@@ -19,6 +19,7 @@ from textual.widgets import Input, OptionList, RichLog, SelectionList, Static
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
+from ogame_tui import encyclopedia
 from ogame_tui.client import APIError
 
 # ---------- Catalog -------------------------------------------------------
@@ -140,6 +141,12 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/join ", "/join <tag> [msg]", "apply to join an alliance"),
     CommandSpec("/leave", "/leave", "leave your alliance"),
     CommandSpec("/me", "/me", "show my account"),
+    CommandSpec("/quest", "/quest", "onboarding quest list with progress"),
+    CommandSpec(
+        "/info ",
+        "/info <key>",
+        "lookup a building/tech/ship/defense (e.g. /info metal_mine)",
+    ),
     CommandSpec(
         "/options",
         "/options [--theme <name>]",
@@ -206,6 +213,8 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]system[/bold]
   /me                     my account info
+  /quest                  onboarding quest list + current goal
+  /info <key>             encyclopedia lookup (buildings, tech, ships, defenses)
   /options                show user prefs
   /options --theme <name> switch color theme (saved across sessions)
   /refresh                force refresh all panels
@@ -265,6 +274,11 @@ def suggestions_for(
                 for k in _TECH_KEYS
                 if k.startswith(arg_l)
             ]
+        if cmd_l == "/info":
+            from ogame_tui import encyclopedia as _enc
+
+            keys = _enc.suggestions(arg_l, limit=20) if arg_l else list(_enc.ALL.keys())[:20]
+            return [(f"/info {k}", _make_label(f"/info {k}", _enc.ALL[k].category)) for k in keys]
         if cmd_l in ("/inbox", "/ib", "/in") and players:
             # Suggest only first token (username); ignore second token cases
             if " " in arg:
@@ -469,7 +483,7 @@ def _nav_text() -> Text:
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", ["/msg", "/inbox"]),
         ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
-        ("HELP", ["/help", "/options"]),
+        ("HELP", ["/help", "/quest", "/info", "/options"]),
     ]
     t = Text()
     for i, (title, cmds) in enumerate(sections):
@@ -686,6 +700,12 @@ class ReplScreen(Screen):
         self._snapshot_taken_at: float = 0.0
         self._queue_cache: list[dict[str, Any]] = []
         self._unread_count: int = 0
+        self._online_count: int = 0
+        self._fleets_cache: list[dict[str, Any]] = []
+        self._incoming_cache: list[dict[str, Any]] = []
+        self._quest_cache: dict[str, Any] | None = None
+        # Toggles each tick so we can blink red planets under attack.
+        self._blink_phase: bool = False
         self._buildings_cache: dict[str, int] = {}
         self._tech_levels_cache: dict[str, int] = {}
         self._max_lab_level: int = 0
@@ -750,6 +770,7 @@ class ReplScreen(Screen):
         self.set_interval(1.0, self._tick, name="tick")
 
     def _tick(self) -> None:
+        self._blink_phase = not self._blink_phase
         self._render_top_bar()
         self._render_planet_card()
         self._render_right_panel()
@@ -783,6 +804,23 @@ class ReplScreen(Screen):
             self._unread_count = await self.app.client.unread_count()
         except APIError:
             self._unread_count = 0
+        try:
+            stats = await self.app.client.stats()
+            self._online_count = int(stats.get("online", 0))
+        except APIError:
+            pass
+        try:
+            self._fleets_cache = await self.app.client.list_fleets()
+        except APIError:
+            self._fleets_cache = []
+        try:
+            self._incoming_cache = await self.app.client.list_incoming_fleets()
+        except APIError:
+            self._incoming_cache = []
+        try:
+            self._quest_cache = await self.app.client.quests()
+        except APIError:
+            self._quest_cache = None
         # Autocomplete for /msg and /inbox only suggests usernames from
         # your existing threads — otherwise at 1000+ players the menu is
         # unusable. Browse the full roster via the web /players page.
@@ -871,9 +909,12 @@ class ReplScreen(Screen):
         left.append_text(line2)
         self._top_left.update(left)
 
-        # --- RIGHT: clock on line 1, unread on line 2 (right-aligned by CSS)
+        # --- RIGHT: clock + online count on line 1, unread on line 2
         right = Text()
         right.append(_now_local_hhmmss(), style="bold green")
+        right.append("  ")
+        right.append("● ", style="bold green")
+        right.append(f"{self._online_count} online", style="dim")
         right.append("\n")
         if self._unread_count > 0:
             right.append(f"✉ {self._unread_count} unread", style="bold magenta")
@@ -931,12 +972,36 @@ class ReplScreen(Screen):
             return
         body = Text()
 
-        # PLANETS — primary section now
-        body.append("PLANETS\n", style="bold yellow")
+        # planet_id -> "hostile" if any incoming attack/espionage is en route
+        hostile_planet_ids: set[int] = {
+            inc["target_planet_id"] for inc in self._incoming_cache if inc.get("is_hostile")
+        }
+        any_attack = bool(hostile_planet_ids)
+
+        # MISSION — current onboarding quest, only while one exists.
+        q = self._quest_cache
+        if q and q.get("current"):
+            current = q["current"]
+            body.append(f"MISSION [{q['done_count']}/{q['total']}]\n", style="bold green")
+            body.append(f"  {current['title']}\n", style="cyan")
+            body.append("  /quest for the full list\n\n", style="dim")
+
+        # PLANETS
+        if any_attack and self._blink_phase:
+            body.append("⚠  PLANETS\n", style="bold red")
+        else:
+            body.append("PLANETS\n", style="bold yellow")
         cur_id = self.app.current_planet_id
         for i, p in enumerate(self._planets_cache, start=1):
+            under_attack = p["id"] in hostile_planet_ids
             marker = "▸ " if p["id"] == cur_id else "  "
-            style = "bold yellow" if p["id"] == cur_id else "cyan"
+            if under_attack and self._blink_phase:
+                # Red blink for any planet with an incoming hostile fleet.
+                style: str = "bold red blink"
+            elif p["id"] == cur_id:
+                style = "bold yellow"
+            else:
+                style = "cyan"
             body.append(marker, style=style)
             body.append(f"{i}. ", style="dim")
             body.append(p.get("code", "—"), style="magenta")
@@ -949,6 +1014,39 @@ class ReplScreen(Screen):
             )
         body.append("\nswitch: ", style="dim")
         body.append("/switch <#|CODE|name>\n", style="yellow")
+
+        # INCOMING — hostile + neutral fleets en route to my planets.
+        if self._incoming_cache:
+            body.append(f"\nINCOMING ({len(self._incoming_cache)})\n", style="bold red")
+            for inc in self._incoming_cache[:5]:
+                hostile = inc.get("is_hostile")
+                head_style = "bold red" if hostile else "yellow"
+                arrow = "⚔" if hostile else "→"
+                body.append(f"  {arrow} ", style=head_style)
+                body.append(f"{inc['mission']}", style=head_style)
+                body.append(" from ", style="dim")
+                body.append(f"{inc['sender_username']}\n", style="bold")
+                body.append(
+                    f"     → {inc['target_galaxy']}:{inc['target_system']}:{inc['target_position']}  "
+                    f"{_remaining_str(inc['arrival_at'])}\n",
+                    style="dim",
+                )
+            if len(self._incoming_cache) > 5:
+                body.append(f"  +{len(self._incoming_cache) - 5} more\n", style="dim")
+
+        # FLEETS — my own outbound/returning fleets.
+        if self._fleets_cache:
+            body.append(f"\nFLEETS ({len(self._fleets_cache)})\n", style="bold yellow")
+            for f in self._fleets_cache[:5]:
+                arr = _remaining_str(f["arrival_at"])
+                body.append(f"  {f['mission']}", style="bold cyan")
+                body.append(
+                    f" → {f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
+                    style="dim",
+                )
+                body.append(f"     {f['status']}  {arr}\n", style="dim")
+            if len(self._fleets_cache) > 5:
+                body.append(f"  +{len(self._fleets_cache) - 5} more\n", style="dim")
 
         # QUEUE — full list, queue cap is 5 anyway so it's never long.
         queue = self._queue_cache
@@ -1205,6 +1303,66 @@ class ReplScreen(Screen):
             me = await self.app.client.me()
             self._cached_user_id = int(me["id"])
         return self._cached_user_id
+
+    async def _cmd_quest(self, args: list[str]) -> None:
+        """Show the onboarding quest list with progress."""
+        try:
+            data = await self.app.client.quests()
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        header = Text()
+        header.append("━━━ Onboarding quests ", style="bold yellow")
+        header.append(f"{data['done_count']}/{data['total']}", style="bold green")
+        header.append(" ━━━", style="bold yellow")
+        self._log.write(header)
+        for q in data.get("completed", []):
+            line = Text()
+            line.append("  ✓ ", style="bold green")
+            line.append(q["title"], style="dim")
+            self._log.write(line)
+        cur = data.get("current")
+        if cur is None:
+            self._log.write("  [bold green]all complete — well done, commander.[/bold green]")
+            return
+        line = Text()
+        line.append("  ▸ ", style="bold yellow")
+        line.append(cur["title"], style="bold yellow")
+        self._log.write(line)
+        self._log.write(f"    [dim]{cur['hint']}[/dim]")
+
+    async def _cmd_info(self, args: list[str]) -> None:
+        """Encyclopedia lookup for any building / tech / ship / defense."""
+        if not args:
+            self._log.write(
+                "[red]usage:[/red] /info <key>  "
+                "[dim](e.g. metal_mine, combustion_drive, cruiser, plasma_turret)[/dim]"
+            )
+            return
+        entry = encyclopedia.lookup(args[0])
+        if entry is None:
+            sugg = encyclopedia.suggestions(args[0])
+            if sugg:
+                self._log.write(
+                    f"[red]no exact match for[/red] [yellow]{args[0]}[/yellow]  "
+                    f"[dim]did you mean:[/dim] {', '.join(sugg)}"
+                )
+            else:
+                self._log.write(f"[red]unknown:[/red] {args[0]}")
+            return
+        cat_style = {
+            "building": "yellow",
+            "tech": "magenta",
+            "ship": "cyan",
+            "defense": "red",
+        }.get(entry.category, "white")
+        header = Text()
+        header.append(f"[{entry.category}] ", style=f"bold {cat_style}")
+        header.append(entry.label, style="bold yellow")
+        header.append(f"  ({entry.key})", style="dim")
+        self._log.write(header)
+        self._log.write(entry.description)
+        self._log.write(f"[dim]live stats:[/dim] [yellow]{entry.see}[/yellow]")
 
     async def _cmd_options(self, args: list[str]) -> None:
         """User-level preferences.

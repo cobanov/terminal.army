@@ -72,6 +72,12 @@ class OGameClient:
     async def me(self) -> dict[str, Any]:
         return await self._request("GET", "/auth/me")
 
+    async def stats(self) -> dict[str, Any]:
+        return await self._request("GET", "/stats")
+
+    async def quests(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/quests")
+
     # ----- Planet ---------------------------------------------------------
     async def list_planets(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/planets")
@@ -198,6 +204,9 @@ class OGameClient:
 
     async def list_fleets(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/fleets")
+
+    async def list_incoming_fleets(self) -> list[dict[str, Any]]:
+        return await self._request("GET", "/fleets/incoming")
 
     # ----- Reports --------------------------------------------------------
     async def list_reports(self, limit: int = 30) -> list[dict[str, Any]]:

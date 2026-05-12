@@ -21,6 +21,7 @@ from backend.app.api.fleet import router as fleet_router
 from backend.app.api.galaxy import router as galaxy_router
 from backend.app.api.leaderboard import router as leaderboard_router
 from backend.app.api.planet import router as planet_router
+from backend.app.api.quest import router as quest_router
 from backend.app.api.research import router as research_router
 from backend.app.api.shipyard import router as shipyard_router
 from backend.app.api.social import router as social_router
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
     app.include_router(stats_router)
     app.include_router(alliance_router, prefix="/api")
     app.include_router(leaderboard_router, prefix="/api")
+    app.include_router(quest_router, prefix="/api")
 
     # Static files (CSS, etc.)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

@@ -3,7 +3,7 @@
     <span class="topbar-brand">SAKUSEN</span>
     {% if server_name is defined %}
       <span class="topbar-server">
-        {{ server_name }}{% if registered_count is defined and server_max_users is defined %} · {{ registered_count }}/{{ server_max_users }}{% endif %}
+        {{ server_name }}{% if registered_count is defined and server_max_users is defined %} · {{ registered_count }}/{{ server_max_users }}{% endif %}{% if online_count is defined %} · <span style="color:#84cc16;">●</span> {{ online_count }} online{% endif %}
       </span>
     {% endif %}
     {% if user is defined and user %}
