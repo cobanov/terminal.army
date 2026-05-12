@@ -834,20 +834,18 @@ class ReplScreen(Screen):
         body.append("\nswitch: ", style="dim")
         body.append("/switch <#|CODE|name>\n", style="yellow")
 
-        # QUEUE — compact
+        # QUEUE — full list, queue cap is 5 anyway so it's never long.
         queue = self._queue_cache
         body.append(f"\nQUEUE ({len(queue)}/5)\n", style="bold yellow")
         if not queue:
             body.append("  empty\n", style="dim")
         else:
-            for q in queue[:3]:  # show first 3
+            for q in queue:
                 remaining = _remaining_str(q["finished_at"])
                 body.append(f"  #{q['id']} ", style="cyan")
                 body.append(f"{q['item_key']}\n", style="dim")
                 rem_style = "green" if remaining != "done" else "dim"
                 body.append(f"    {remaining}\n", style=rem_style)
-            if len(queue) > 3:
-                body.append(f"  +{len(queue) - 3} more\n", style="dim")
 
         # Compact one-liner for messages
         body.append("\nMESSAGES  ", style="bold yellow")
