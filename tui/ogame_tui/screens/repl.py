@@ -1159,13 +1159,20 @@ class ReplScreen(Screen):
         self._planet_card.update(layout)
 
     def _render_right_panel(self) -> None:
+        # Color rules for this panel (kept intentionally narrow so the
+        # eye lands only on things that need action):
+        #   - All section headers       → bold yellow
+        #   - Body text                 → default foreground (no style)
+        #   - Secondary / metadata      → dim
+        #   - The active planet marker  → bold yellow (just the ▸)
+        #   - Things that need attention (hostile incoming, unread mail,
+        #     energy throttle) → red / magenta
+        # No green/cyan/magenta accents on routine text.
         if self.app.current_planet_id is None:
             self._right.update("[dim]no planet[/dim]")
             return
         body = Text()
 
-        # Set of planet ids that have an incoming hostile fleet — drives the
-        # red blink in the PLANETS list. The detailed row stays in MISSIONS.
         hostile_planet_ids: set[int] = {
             inc["target_planet_id"] for inc in self._incoming_cache if inc.get("is_hostile")
         }
@@ -1173,24 +1180,24 @@ class ReplScreen(Screen):
 
         # === 1) PLANETS ===
         if any_attack and self._blink_phase:
-            body.append("⚠  PLANETS\n", style="bold red")
+            body.append("⚠ PLANETS\n", style="bold red")
         else:
             body.append("PLANETS\n", style="bold yellow")
         cur_id = self.app.current_planet_id
         for i, p in enumerate(self._planets_cache, start=1):
             under_attack = p["id"] in hostile_planet_ids
-            marker = "▸ " if p["id"] == cur_id else "  "
+            is_current = p["id"] == cur_id
+            # Marker is the only colored bit per row; everything else is
+            # default text or dim.
             if under_attack and self._blink_phase:
-                style: str = "bold red blink"
-            elif p["id"] == cur_id:
-                style = "bold yellow"
+                body.append("⚠ ", style="bold red blink")
+            elif is_current:
+                body.append("▸ ", style="bold yellow")
             else:
-                style = "cyan"
-            body.append(marker, style=style)
+                body.append("  ")
             body.append(f"{i}. ", style="dim")
-            body.append(p.get("code", "—"), style="magenta")
-            body.append("#", style="dim")
-            body.append(f"{p['name']}\n", style=style)
+            line = f"{p.get('code', '—')}#{p['name']}"
+            body.append(line + "\n", style="bold" if is_current else "")
             body.append(
                 f"     {p['galaxy']}:{p['system']}:{p['position']}  "
                 f"M {_fmt_int(p['resources_metal'])}\n",
@@ -1205,28 +1212,32 @@ class ReplScreen(Screen):
         else:
             for q in queue:
                 remaining = _remaining_str(q["finished_at"])
-                body.append(f"  #{q['id']} ", style="cyan")
-                body.append(f"{q['item_key']}\n", style="dim")
-                rem_style = "green" if remaining != "done" else "dim"
+                body.append(f"  #{q['id']} ", style="dim")
+                body.append(f"{q['item_key']}\n")
                 frac = _progress_fraction(q["started_at"], q["finished_at"])
                 filled, empty = _progress_bar(frac, width=10)
                 body.append("    ")
-                body.append(filled, style="green")
+                body.append(filled)
                 body.append(empty, style="dim")
-                body.append(f"  {remaining}\n", style=rem_style)
+                body.append(f"  {remaining}\n", style="dim")
 
-        # === 3) MISSIONS — active fleet operations (mine outbound + hostile inbound) ===
-        if self._fleets_cache or self._incoming_cache:
-            total_count = len(self._fleets_cache) + len(self._incoming_cache)
-            body.append(f"\nMISSIONS ({total_count})\n", style="bold yellow")
-            # Incoming first because attacks are time-critical.
+        # === 3) MISSIONS — active fleet operations ===
+        body.append(
+            f"\nMISSIONS ({len(self._fleets_cache) + len(self._incoming_cache)})\n",
+            style="bold yellow",
+        )
+        if not self._fleets_cache and not self._incoming_cache:
+            body.append("  no active fleets\n", style="dim")
+        else:
             for inc in self._incoming_cache[:5]:
                 hostile = inc.get("is_hostile")
-                head_style = "bold red" if hostile else "yellow"
-                arrow = "⚔" if hostile else "→"
-                body.append(f"  {arrow} {inc['mission']}", style=head_style)
-                body.append(" from ", style="dim")
-                body.append(f"{inc['sender_username']}\n", style="bold")
+                if hostile:
+                    # Hostile inbound: red prefix + name, body in default.
+                    body.append("  ⚔ ", style="bold red")
+                    body.append(f"{inc['mission']} from {inc['sender_username']}\n")
+                else:
+                    body.append("  ↓ ", style="dim")
+                    body.append(f"{inc['mission']} from {inc['sender_username']}\n")
                 body.append(
                     f"    → {inc['target_galaxy']}:{inc['target_system']}:{inc['target_position']}  "
                     f"{_remaining_str(inc['arrival_at'])}\n",
@@ -1235,38 +1246,36 @@ class ReplScreen(Screen):
             if len(self._incoming_cache) > 5:
                 body.append(f"  +{len(self._incoming_cache) - 5} more inbound\n", style="dim")
             for f in self._fleets_cache[:5]:
-                arr = _remaining_str(f["arrival_at"])
-                body.append(f"  → {f['mission']}", style="cyan")
+                body.append("  → ", style="dim")
                 body.append(
-                    f" → {f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
+                    f"{f['mission']} → "
+                    f"{f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n"
+                )
+                body.append(
+                    f"    {f['status']}  {_remaining_str(f['arrival_at'])}\n",
                     style="dim",
                 )
-                body.append(f"    {f['status']}  {arr}\n", style="dim")
             if len(self._fleets_cache) > 5:
                 body.append(f"  +{len(self._fleets_cache) - 5} more outbound\n", style="dim")
-        else:
-            body.append("\nMISSIONS\n", style="bold yellow")
-            body.append("  no active fleets\n", style="dim")
 
         # === 4) QUESTS — onboarding progression ===
         qd = self._quest_cache
         if qd:
-            body.append(
-                f"\nQUESTS [{qd['done_count']}/{qd['total']}]\n", style="bold green"
-            )
+            body.append("\nQUESTS ", style="bold yellow")
+            body.append(f"[{qd['done_count']}/{qd['total']}]\n", style="dim")
             cur = qd.get("current")
             if cur is None:
-                body.append("  all complete ✓\n", style="dim green")
+                body.append("  all complete ✓\n", style="dim")
             else:
-                body.append(f"  ▸ {cur['title']}\n", style="cyan")
+                body.append("  ▸ ", style="bold yellow")
+                body.append(f"{cur['title']}\n")
 
         # === 5) MESSAGES ===
-        body.append("\nMESSAGES  ", style="bold yellow")
+        body.append("\nMESSAGES ", style="bold yellow")
         if self._unread_count == 0:
             body.append("(none)\n", style="dim")
         else:
-            body.append(f"{self._unread_count} new", style="bold magenta")
-            body.append(" /inbox\n", style="dim")
+            body.append(f"{self._unread_count} new\n", style="bold magenta")
         self._right.update(body)
 
     def _username(self) -> str:
