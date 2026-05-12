@@ -43,6 +43,7 @@ from backend.app.models.planet import Planet
 from backend.app.models.research import Research
 from backend.app.models.ship import PlanetDefense, PlanetShip
 from backend.app.models.user import User
+from backend.app.services.planet_code import generate_unique_code
 from backend.app.services.resource_service import refresh_planet_resources
 from backend.app.services.universe_service import get_default_universe
 from backend.app.web_templates import templates
@@ -253,12 +254,14 @@ async def admin_create_planet(
         return RedirectResponse(f"/admin/user/{user_id}?err=slot+taken", status_code=303)
 
     attrs = generate_planet_attributes(position, random.Random())
+    code = await generate_unique_code(db)
     planet = Planet(
         owner_user_id=user_id,
         universe_id=target.current_universe_id,
         galaxy=galaxy,
         system=system,
         position=position,
+        code=code,
         name=name,
         fields_used=0,
         fields_total=attrs.fields_total,

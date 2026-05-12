@@ -27,6 +27,11 @@ class Planet(Base):
     system: Mapped[int] = mapped_column(Integer, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # Short, human-typeable id (e.g. "A3D5") used in the UI alongside the
+    # planet name. Globally unique within the server. The DB row's `id`
+    # stays the primary key — `code` is just for display + /switch.
+    code: Mapped[str] = mapped_column(String(8), nullable=False, unique=True, index=True)
+
     name: Mapped[str] = mapped_column(String(64), nullable=False, default="Homeworld")
 
     fields_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

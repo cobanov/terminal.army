@@ -38,7 +38,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Create all tables. Used at startup when not using Alembic (e.g. SQLite dev)."""
+    """Create any missing tables; additive schema patches happen elsewhere.
+
+    `create_all` is idempotent for full tables but does NOT add new columns
+    to existing tables. For column-level migrations, see the additive
+    patches in universe_service (backfill_*). For DB-level migrations on
+    production deploys, run `alembic upgrade head` separately.
+    """
     from backend.app.models import all_models  # noqa: F401  (register models)
 
     async with engine.begin() as conn:

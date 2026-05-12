@@ -218,9 +218,7 @@ async def request_join_alliance(
 
 
 @router.get("/alliances/{tag}/requests", response_model=list[JoinRequestRead])
-async def list_join_requests(
-    tag: str, user: CurrentUser, db: DBSession
-) -> list[JoinRequestRead]:
+async def list_join_requests(tag: str, user: CurrentUser, db: DBSession) -> list[JoinRequestRead]:
     """Founder-only: list pending applicants for the alliance."""
     a = await _alliance_by_tag(db, tag)
     if a.founder_id != user.id:
@@ -281,15 +279,9 @@ async def approve_join_request(
     if in_other.scalar_one_or_none() is not None:
         await db.delete(req)
         await db.commit()
-        raise HTTPException(
-            status_code=409, detail=f"{username} already belongs to an alliance"
-        )
+        raise HTTPException(status_code=409, detail=f"{username} already belongs to an alliance")
 
-    db.add(
-        AllianceMember(
-            alliance_id=a.id, user_id=applicant.id, role=AllianceRole.MEMBER.value
-        )
-    )
+    db.add(AllianceMember(alliance_id=a.id, user_id=applicant.id, role=AllianceRole.MEMBER.value))
     await db.delete(req)
     await db.commit()
     return await _row_to_read(db, a)
@@ -306,9 +298,7 @@ async def reject_join_request(
 
 
 @router.get("/me/alliance-request", response_model=JoinRequestRead | None)
-async def my_alliance_request(
-    user: CurrentUser, db: DBSession
-) -> JoinRequestRead | None:
+async def my_alliance_request(user: CurrentUser, db: DBSession) -> JoinRequestRead | None:
     res = await db.execute(
         select(AllianceJoinRequest, Alliance)
         .join(Alliance, Alliance.id == AllianceJoinRequest.alliance_id)
@@ -330,9 +320,7 @@ async def my_alliance_request(
 
 
 @router.delete("/me/alliance-request")
-async def withdraw_alliance_request(
-    user: CurrentUser, db: DBSession
-) -> dict[str, bool]:
+async def withdraw_alliance_request(user: CurrentUser, db: DBSession) -> dict[str, bool]:
     res = await db.execute(
         select(AllianceJoinRequest).where(AllianceJoinRequest.user_id == user.id)
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -19,6 +20,7 @@ from backend.app.models.building import Building
 from backend.app.models.planet import Planet
 from backend.app.models.research import Research
 from backend.app.models.universe import Universe
+from backend.app.services.planet_code import generate_unique_code
 
 
 async def get_default_universe(db: AsyncSession) -> Universe | None:
@@ -82,12 +84,14 @@ async def assign_starting_planet(
         position = rng.randint(4, 12)
         attrs = generate_planet_attributes(position, rng)
 
+        code = await generate_unique_code(db)
         planet = Planet(
             owner_user_id=user_id,
             universe_id=universe.id,
             galaxy=galaxy,
             system=system,
             position=position,
+            code=code,
             name="Homeworld",
             fields_used=0,
             fields_total=attrs.fields_total,
@@ -124,6 +128,60 @@ async def ensure_user_researches(db: AsyncSession, user_id: int) -> None:
         if tt.value not in existing:
             db.add(Research(user_id=user_id, tech_type=tt.value, level=0))
     await db.flush()
+
+
+async def backfill_planet_codes(db: AsyncSession) -> int:
+    """Schema patch: add `code` to existing planets if the column was
+    introduced after they were created.
+
+    Two cases:
+    1. Production via Alembic — the migration adds the column and
+       backfills; this fn no-ops.
+    2. Local dev via `create_all` only — the column is added but rows
+       predate the model; we ALTER TABLE + UPDATE here.
+
+    Idempotent: a planet that already has a code is skipped.
+    """
+    from sqlalchemy import text
+
+    from backend.app.db import engine
+    from backend.app.models.planet import Planet
+
+    def _has_col(sync_conn: Any) -> bool:
+        from sqlalchemy import inspect as sync_inspect
+
+        cols = {c["name"] for c in sync_inspect(sync_conn).get_columns("planets")}
+        return "code" in cols
+
+    async with engine.begin() as conn:
+        has_col = await conn.run_sync(_has_col)
+
+    if not has_col:
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER TABLE planets ADD COLUMN code VARCHAR(8)"))
+
+    res = await db.execute(select(Planet.id).where(Planet.code.is_(None)))
+    pids = list(res.scalars().all())
+    added = 0
+    if pids:
+        for pid in pids:
+            code = await generate_unique_code(db)
+            await db.execute(
+                text("UPDATE planets SET code = :code WHERE id = :id"),
+                {"code": code, "id": pid},
+            )
+            added += 1
+        await db.commit()
+
+    # Tighten the column post-backfill. CREATE UNIQUE INDEX IF NOT EXISTS
+    # makes this idempotent across restarts.
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_planets_code ON planets (code)")
+        )
+        if not has_col:
+            await conn.execute(text("ALTER TABLE planets ALTER COLUMN code SET NOT NULL"))
+    return added
 
 
 async def backfill_planet_buildings(db: AsyncSession) -> int:

@@ -177,9 +177,14 @@ async def cancel_queue_item(db: AsyncSession, queue_id: int, user_id: int) -> Bu
     if planet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="planet not found")
 
-    planet.resources_metal = float(planet.resources_metal) + queue.cost_metal
-    planet.resources_crystal = float(planet.resources_crystal) + queue.cost_crystal
-    planet.resources_deuterium = float(planet.resources_deuterium) + queue.cost_deuterium
+    # OGame-style cancellation: 50% refund. The other half is "construction
+    # overhead" — discourages spam-queue-then-cancel as a free preview tool.
+    refund_m = queue.cost_metal // 2
+    refund_c = queue.cost_crystal // 2
+    refund_d = queue.cost_deuterium // 2
+    planet.resources_metal = float(planet.resources_metal) + refund_m
+    planet.resources_crystal = float(planet.resources_crystal) + refund_c
+    planet.resources_deuterium = float(planet.resources_deuterium) + refund_d
     queue.cancelled = True
 
     # Shift later items in the same planet+queue_type so the slot the

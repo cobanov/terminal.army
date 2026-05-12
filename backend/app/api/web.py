@@ -742,9 +742,7 @@ async def alliance_join_form(
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        return RedirectResponse(
-            f"/alliances/{a.tag}?err=Request+already+pending", status_code=303
-        )
+        return RedirectResponse(f"/alliances/{a.tag}?err=Request+already+pending", status_code=303)
     return RedirectResponse(
         f"/alliances/{a.tag}?ok=Join+request+sent.+Wait+for+the+founder+to+approve.",
         status_code=303,
@@ -794,16 +792,10 @@ async def alliance_request_approve_form(
             status_code=303,
         )
 
-    db.add(
-        AllianceMember(
-            alliance_id=a.id, user_id=applicant.id, role=AllianceRole.MEMBER.value
-        )
-    )
+    db.add(AllianceMember(alliance_id=a.id, user_id=applicant.id, role=AllianceRole.MEMBER.value))
     await db.delete(req)
     await db.commit()
-    return RedirectResponse(
-        f"/alliances/{a.tag}?ok={username}+approved", status_code=303
-    )
+    return RedirectResponse(f"/alliances/{a.tag}?ok={username}+approved", status_code=303)
 
 
 @router.post("/alliances/{tag}/requests/{username}/reject")
@@ -840,9 +832,7 @@ async def alliance_request_reject_form(
     if req is not None:
         await db.delete(req)
         await db.commit()
-    return RedirectResponse(
-        f"/alliances/{a.tag}?ok={username}+rejected", status_code=303
-    )
+    return RedirectResponse(f"/alliances/{a.tag}?ok={username}+rejected", status_code=303)
 
 
 @router.post("/alliances/withdraw-request")

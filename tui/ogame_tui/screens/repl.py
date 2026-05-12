@@ -105,7 +105,7 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/help", "/help", "show all commands"),
     CommandSpec("/planets", "/planets", "list my planets"),
     CommandSpec("/planet", "/planet", "current planet detail"),
-    CommandSpec("/switch ", "/switch <id>", "change active planet"),
+    CommandSpec("/switch ", "/switch <#|CODE|name>", "change active planet"),
     CommandSpec("/buildings", "/buildings", "all buildings (resources + facilities)"),
     CommandSpec("/resources", "/resources", "mines, energy, storage, crawlers"),
     CommandSpec("/facilities", "/facilities", "industry, research, depots"),
@@ -152,7 +152,7 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 [bold]gameplay[/bold]
   /planets                list my planets
   /planet                 current planet detail
-  /switch <id>            change active planet
+  /switch <#|CODE|name>   change active planet by number / code / name
   /buildings              all buildings (resources + facilities)
   /resources              mines, energy, storage, crawlers
   /facilities             industry, research, depots
@@ -231,6 +231,7 @@ def _make_label(name: str, desc: str) -> Text:
 def suggestions_for(
     input_text: str,
     players: list[str] | None = None,
+    planets: list[dict] | None = None,
 ) -> list[tuple[str, Text]]:
     text = input_text.lstrip()
     if not text:
@@ -275,6 +276,45 @@ def suggestions_for(
                 for u in players
                 if u.lower().startswith(arg_l)
             ]
+        if cmd_l in ("/switch", "/sw") and planets:
+            if " " in arg:
+                return []
+            out: list[tuple[str, Text]] = []
+            for i, p in enumerate(planets, start=1):
+                code = (p.get("code") or "").upper()
+                name = p.get("name", "")
+                # Code prefix
+                if arg_l and code.lower().startswith(arg_l):
+                    out.append(
+                        (
+                            f"/switch {code}",
+                            _make_label(f"/switch {code}", f"{code}#{name}"),
+                        )
+                    )
+                # Name prefix (case-insensitive)
+                elif arg_l and name.lower().startswith(arg_l):
+                    out.append(
+                        (
+                            f"/switch {name}",
+                            _make_label(f"/switch {name}", f"{code}#{name}"),
+                        )
+                    )
+                # Pure-digit arg: only suggest the matching index, if any
+                elif arg.isdigit() and str(i).startswith(arg):
+                    out.append(
+                        (
+                            f"/switch {i}",
+                            _make_label(f"/switch {i}", f"{code}#{name}"),
+                        )
+                    )
+                elif not arg_l:
+                    out.append(
+                        (
+                            f"/switch {code}",
+                            _make_label(f"/switch {code}", f"{code}#{name}"),
+                        )
+                    )
+            return out
         return []
 
     if not text.startswith("/"):
@@ -782,18 +822,21 @@ class ReplScreen(Screen):
         # PLANETS — primary section now
         body.append("PLANETS\n", style="bold yellow")
         cur_id = self.app.current_planet_id
-        for p in self._planets_cache:
+        for i, p in enumerate(self._planets_cache, start=1):
             marker = "▸ " if p["id"] == cur_id else "  "
             style = "bold yellow" if p["id"] == cur_id else "cyan"
             body.append(marker, style=style)
+            body.append(f"{i}. ", style="dim")
+            body.append(p.get("code", "—"), style="magenta")
+            body.append("#", style="dim")
             body.append(f"{p['name']}\n", style=style)
             body.append(
-                f"    {p['galaxy']}:{p['system']}:{p['position']}  "
+                f"     {p['galaxy']}:{p['system']}:{p['position']}  "
                 f"M {_fmt_int(p['resources_metal'])}\n",
                 style="dim",
             )
         body.append("\nswitch: ", style="dim")
-        body.append("/switch <id>\n", style="yellow")
+        body.append("/switch <#|CODE|name>\n", style="yellow")
 
         # QUEUE — compact
         queue = self._queue_cache
@@ -835,7 +878,7 @@ class ReplScreen(Screen):
         self._update_suggestions(event.value)
 
     def _update_suggestions(self, text: str) -> None:
-        items = suggestions_for(text, players=self._players_cache)
+        items = suggestions_for(text, players=self._players_cache, planets=self._planets_cache)
         self._current_suggestions = items
         self._suggestions.clear_options()
         if not items:
@@ -1020,8 +1063,10 @@ class ReplScreen(Screen):
             "rank": "leaderboard",
             "ranking": "leaderboard",
             "ally": "alliance",
-            "req": "requests", "reqs": "requests",
-            "app": "approve", "approval": "approve",
+            "req": "requests",
+            "reqs": "requests",
+            "app": "approve",
+            "approval": "approve",
             "rej": "reject",
             "wd": "withdraw",
             "all": "alliances",
@@ -1071,17 +1116,19 @@ class ReplScreen(Screen):
             self._log.write("[dim]no planets[/dim]")
             return
         t = Table(show_header=True, header_style="bold yellow", box=None)
-        t.add_column("id", style="cyan")
+        t.add_column("#", style="cyan", justify="right")
+        t.add_column("code", style="magenta")
         t.add_column("name")
         t.add_column("coord")
         t.add_column("metal", justify="right")
         t.add_column("crystal", justify="right")
         t.add_column("deut", justify="right")
         cur = self.app.current_planet_id
-        for p in self._planets_cache:
+        for i, p in enumerate(self._planets_cache, start=1):
             marker = "[green]*[/green]" if p["id"] == cur else " "
             t.add_row(
-                f"{marker}{p['id']}",
+                f"{marker}{i}",
+                p.get("code", "—"),
                 p["name"],
                 f"{p['galaxy']}:{p['system']}:{p['position']}",
                 _fmt_int(p["resources_metal"]),
@@ -1089,22 +1136,59 @@ class ReplScreen(Screen):
                 _fmt_int(p["resources_deuterium"]),
             )
         self._log.write(t)
+        self._log.write("[dim]switch by[/dim] [yellow]/switch <#|CODE|name>[/yellow]")
+
+    def _resolve_planet(self, arg: str) -> dict | None:
+        """Match a planet by per-user number, code, or name (prefix/exact).
+
+        Returns the planet dict from `_planets_cache`, or None.
+        """
+        if not self._planets_cache:
+            return None
+        # 1) per-user number (1-based)
+        if arg.isdigit():
+            idx = int(arg)
+            if 1 <= idx <= len(self._planets_cache):
+                return self._planets_cache[idx - 1]
+            return None
+        upper = arg.upper()
+        # 2) exact code match
+        for p in self._planets_cache:
+            if (p.get("code") or "").upper() == upper:
+                return p
+        # 3) name: exact (case-insensitive) wins, otherwise unique prefix.
+        lower = arg.lower()
+        exact = [p for p in self._planets_cache if p["name"].lower() == lower]
+        if len(exact) == 1:
+            return exact[0]
+        prefix = [p for p in self._planets_cache if p["name"].lower().startswith(lower)]
+        if len(prefix) == 1:
+            return prefix[0]
+        return None
 
     async def _cmd_switch(self, args: list[str]) -> None:
         if not args:
-            self._log.write("[red]usage:[/red] /switch <planet_id>")
-            return
-        try:
-            new_id = int(args[0])
-        except ValueError:
-            self._log.write("[red]error:[/red] id must be integer")
+            self._log.write("[red]usage:[/red] /switch <number | CODE | name>")
             return
         await self._refresh_planets()
-        if not any(p["id"] == new_id for p in self._planets_cache):
-            self._log.write(f"[red]planet {new_id} not yours or doesn't exist[/red]")
+        target = self._resolve_planet(args[0])
+        if target is None:
+            candidates = (
+                ", ".join(f"{p.get('code', '?')}#{p['name']}" for p in self._planets_cache)
+                or "(no planets)"
+            )
+            self._log.write(
+                f"[red]no match for[/red] [yellow]{args[0]}[/yellow]  "
+                f"[dim]try one of:[/dim] {candidates}"
+            )
             return
-        self.app.current_planet_id = new_id
-        self._log.write(f"[green]active planet: {new_id}[/green]")
+        self.app.current_planet_id = target["id"]
+        self._log.write(
+            f"[green]active planet:[/green] "
+            f"[magenta]{target.get('code', '—')}[/magenta]"
+            f"[dim]#[/dim]{target['name']} "
+            f"[dim]({target['galaxy']}:{target['system']}:{target['position']})[/dim]"
+        )
 
     async def _cmd_planet(self, args: list[str]) -> None:
         pid = self._require_planet()

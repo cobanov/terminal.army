@@ -145,12 +145,19 @@ async def test_cancel_queue_refunds(client) -> None:
         headers={"Authorization": f"Bearer {token}"},
     )
     queue_id = r.json()["queue_id"]
+    cost_metal = r.json()["cost_metal"]
+    cost_crystal = r.json()["cost_crystal"]
 
     r = await client.delete(f"/queue/{queue_id}", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
 
     async with AsyncSessionLocal() as db:
         planet = await db.get(Planet, planet_id)
-        # Refund returns the spent amount; passive production has added a tiny bit.
-        assert planet.resources_metal >= 500
-        assert planet.resources_crystal >= 500
+        # OGame-style: cancel refunds 50% of the cost. Starting at 500/500,
+        # we spent cost_metal/cost_crystal and get back half. Passive
+        # production has added a tiny bit.
+        expected_metal = 500 - cost_metal + cost_metal // 2
+        expected_crystal = 500 - cost_crystal + cost_crystal // 2
+        assert planet.resources_metal >= expected_metal
+        assert planet.resources_metal < 500  # confirm not full refund
+        assert planet.resources_crystal >= expected_crystal

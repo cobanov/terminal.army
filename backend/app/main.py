@@ -33,6 +33,7 @@ from backend.app.rate_limit import limiter
 from backend.app.scheduler import start_scheduler, stop_scheduler
 from backend.app.services.universe_service import (
     backfill_planet_buildings,
+    backfill_planet_codes,
     backfill_user_researches,
     ensure_default_universe,
 )
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await ensure_default_universe(
             db, name=settings.default_universe_name, speed=settings.default_universe_speed
         )
+        await backfill_planet_codes(db)
         await backfill_planet_buildings(db)
         await backfill_user_researches(db)
     start_scheduler()

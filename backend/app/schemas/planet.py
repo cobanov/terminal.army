@@ -9,6 +9,7 @@ class PlanetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    code: str
     owner_user_id: int
     universe_id: int
     galaxy: int
