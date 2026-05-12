@@ -173,13 +173,13 @@ make server-reload       # = `docker compose up -d backend` (recreates with new 
 ## 7. Backups
 
 ```bash
-docker compose exec postgres pg_dump -U ogame ogame > "terminal-army-$(date +%Y%m%d).sql"
+docker compose exec postgres pg_dump -U tarmy tarmy > "terminal-army-$(date +%Y%m%d).sql"
 ```
 
 Cron it nightly:
 
 ```
-0 3 * * * cd /opt/terminal-army && docker compose exec -T postgres pg_dump -U ogame ogame | gzip > "/var/backups/terminal-army-$(date +\%Y\%m\%d).sql.gz" && find /var/backups -name 'terminal-army-*.sql.gz' -mtime +14 -delete
+0 3 * * * cd /opt/terminal-army && docker compose exec -T postgres pg_dump -U tarmy tarmy | gzip > "/var/backups/terminal-army-$(date +\%Y\%m\%d).sql.gz" && find /var/backups -name 'terminal-army-*.sql.gz' -mtime +14 -delete
 ```
 
 ## 8. Resetting the universe
@@ -190,6 +190,32 @@ Cron it nightly:
 docker compose down -v
 make server-up
 ```
+
+### Migrating from a pre-rename deployment
+
+Older deployments used the postgres user and database `ogame`. The
+current compose hardcodes `tarmy` instead, which is incompatible with
+an existing pgdata volume. To preserve data:
+
+```bash
+# 1. Dump the old DB
+docker compose exec -T postgres pg_dump -U ogame ogame > pre-rename.sql
+
+# 2. Stop everything and wipe the volume
+docker compose down -v
+
+# 3. Boot just postgres so the new tarmy DB is created
+docker compose up -d postgres
+
+# 4. Restore (the dump's CREATE TABLEs land in the new tarmy DB)
+docker compose exec -T postgres psql -U tarmy tarmy < pre-rename.sql
+
+# 5. Start the backend
+docker compose up -d backend
+```
+
+If you don't need the data, `docker compose down -v && make server-up`
+is faster.
 
 ## 9. Admin & runtime tuning
 

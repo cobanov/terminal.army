@@ -1,9 +1,5 @@
 # terminal.army — backend + postgres
 #
-# Internal container/db names kept as "ogame*" so existing volumes mount
-# without re-init; the rename has no externally visible effect since
-# players only see the public URL.
-#
 # Run:
 #   docker compose up -d
 #
@@ -25,20 +21,24 @@
 #   HOST_PORT=9931
 #   SERVER_NAME=s1
 #   DEFAULT_UNIVERSE_SPEED=1
+#
+# Migrating from an older deployment that used the postgres user/db
+# "ogame": the cleanest path is to dump, wipe the volume, restore as
+# "tarmy". See docs/DEPLOY.md.
 
 services:
   postgres:
     image: postgres:16
-    container_name: ogame-postgres
+    container_name: tarmy-postgres
     environment:
-      POSTGRES_USER: ogame
+      POSTGRES_USER: tarmy
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (openssl rand -hex 24)}
-      POSTGRES_DB: ogame
+      POSTGRES_DB: tarmy
       TZ: UTC
     volumes:
-      - ogame-pgdata:/var/lib/postgresql/data
+      - tarmy-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ogame -d ogame"]
+      test: ["CMD-SHELL", "pg_isready -U tarmy -d tarmy"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -54,13 +54,13 @@ services:
       context: .
       dockerfile: Dockerfile
     image: terminal-army-backend:latest
-    container_name: ogame-backend
+    container_name: tarmy-backend
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       ENV: ${ENV:-dev}
-      DATABASE_URL: postgresql+asyncpg://ogame:${POSTGRES_PASSWORD}@postgres:5432/ogame
+      DATABASE_URL: postgresql+asyncpg://tarmy:${POSTGRES_PASSWORD}@postgres:5432/tarmy
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
@@ -92,4 +92,4 @@ services:
         max-file: "5"
 
 volumes:
-  ogame-pgdata:
+  tarmy-pgdata:
