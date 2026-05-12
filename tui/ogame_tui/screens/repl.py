@@ -972,21 +972,14 @@ class ReplScreen(Screen):
             return
         body = Text()
 
-        # planet_id -> "hostile" if any incoming attack/espionage is en route
+        # Set of planet ids that have an incoming hostile fleet — drives the
+        # red blink in the PLANETS list.
         hostile_planet_ids: set[int] = {
             inc["target_planet_id"] for inc in self._incoming_cache if inc.get("is_hostile")
         }
         any_attack = bool(hostile_planet_ids)
 
-        # MISSION — current onboarding quest, only while one exists.
-        q = self._quest_cache
-        if q and q.get("current"):
-            current = q["current"]
-            body.append(f"MISSION [{q['done_count']}/{q['total']}]\n", style="bold green")
-            body.append(f"  {current['title']}\n", style="cyan")
-            body.append("  /quest for the full list\n\n", style="dim")
-
-        # PLANETS
+        # === 1) PLANETS ===
         if any_attack and self._blink_phase:
             body.append("⚠  PLANETS\n", style="bold red")
         else:
@@ -996,7 +989,6 @@ class ReplScreen(Screen):
             under_attack = p["id"] in hostile_planet_ids
             marker = "▸ " if p["id"] == cur_id else "  "
             if under_attack and self._blink_phase:
-                # Red blink for any planet with an incoming hostile fleet.
                 style: str = "bold red blink"
             elif p["id"] == cur_id:
                 style = "bold yellow"
@@ -1015,7 +1007,8 @@ class ReplScreen(Screen):
         body.append("\nswitch: ", style="dim")
         body.append("/switch <#|CODE|name>\n", style="yellow")
 
-        # INCOMING — hostile + neutral fleets en route to my planets.
+        # Incoming alert lives with PLANETS — same conceptual surface
+        # (something is happening to my planets).
         if self._incoming_cache:
             body.append(f"\nINCOMING ({len(self._incoming_cache)})\n", style="bold red")
             for inc in self._incoming_cache[:5]:
@@ -1034,25 +1027,11 @@ class ReplScreen(Screen):
             if len(self._incoming_cache) > 5:
                 body.append(f"  +{len(self._incoming_cache) - 5} more\n", style="dim")
 
-        # FLEETS — my own outbound/returning fleets.
-        if self._fleets_cache:
-            body.append(f"\nFLEETS ({len(self._fleets_cache)})\n", style="bold yellow")
-            for f in self._fleets_cache[:5]:
-                arr = _remaining_str(f["arrival_at"])
-                body.append(f"  {f['mission']}", style="bold cyan")
-                body.append(
-                    f" → {f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
-                    style="dim",
-                )
-                body.append(f"     {f['status']}  {arr}\n", style="dim")
-            if len(self._fleets_cache) > 5:
-                body.append(f"  +{len(self._fleets_cache) - 5} more\n", style="dim")
-
-        # QUEUE — full list, queue cap is 5 anyway so it's never long.
+        # === 2) QUEUES (build queue + my outgoing fleets) ===
         queue = self._queue_cache
-        body.append(f"\nQUEUE ({len(queue)}/5)\n", style="bold yellow")
+        body.append(f"\nQUEUES ({len(queue)}/5)\n", style="bold yellow")
         if not queue:
-            body.append("  empty\n", style="dim")
+            body.append("  build: empty\n", style="dim")
         else:
             for q in queue:
                 remaining = _remaining_str(q["finished_at"])
@@ -1060,8 +1039,32 @@ class ReplScreen(Screen):
                 body.append(f"{q['item_key']}\n", style="dim")
                 rem_style = "green" if remaining != "done" else "dim"
                 body.append(f"    {remaining}\n", style=rem_style)
+        # Outbound fleets sit right under the build queue: both are "things
+        # I started that finish in the future".
+        if self._fleets_cache:
+            body.append(f"  fleets ({len(self._fleets_cache)})\n", style="bold cyan")
+            for f in self._fleets_cache[:5]:
+                arr = _remaining_str(f["arrival_at"])
+                body.append(f"  {f['mission']}", style="cyan")
+                body.append(
+                    f" → {f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
+                    style="dim",
+                )
+                body.append(f"    {f['status']}  {arr}\n", style="dim")
+            if len(self._fleets_cache) > 5:
+                body.append(f"  +{len(self._fleets_cache) - 5} more\n", style="dim")
 
-        # Compact one-liner for messages
+        # === 3) MISSIONS (onboarding quest) ===
+        q = self._quest_cache
+        if q and q.get("current"):
+            current = q["current"]
+            body.append(
+                f"\nMISSIONS [{q['done_count']}/{q['total']}]\n", style="bold green"
+            )
+            body.append(f"  {current['title']}\n", style="cyan")
+            body.append("  /quest for the full list\n", style="dim")
+
+        # === 4) MESSAGES ===
         body.append("\nMESSAGES  ", style="bold yellow")
         if self._unread_count == 0:
             body.append("(none)\n", style="dim")
