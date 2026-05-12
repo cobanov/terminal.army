@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import random
 import shlex
@@ -1141,68 +1142,100 @@ class ReplScreen(Screen):
         pid = self.app.current_planet_id
         if pid is None:
             return
-        try:
-            self._snapshot = await self.app.client.get_planet(pid)
-            self._snapshot_taken_at = monotonic()
-        except APIError:
+        client = self.app.client
+        (
+            snapshot_res,
+            queue_res,
+            buildings_res,
+            researches_res,
+            unread_res,
+            stats_res,
+            points_res,
+            fleets_res,
+            incoming_res,
+            quests_res,
+            threads_res,
+        ) = await asyncio.gather(
+            client.get_planet(pid),
+            client.get_queue(pid),
+            client.list_buildings(pid),
+            client.list_researches(),
+            client.unread_count(),
+            client.stats(),
+            client.my_points(),
+            client.list_fleets(),
+            client.list_incoming_fleets(),
+            client.quests(),
+            client.threads(),
+            return_exceptions=True,
+        )
+
+        if isinstance(snapshot_res, BaseException):
             return
-        try:
-            self._queue_cache = await self.app.client.get_queue(pid)
-        except APIError:
+        self._snapshot = snapshot_res
+        self._snapshot_taken_at = monotonic()
+
+        if isinstance(queue_res, BaseException):
             self._queue_cache = []
-        try:
-            blds = await self.app.client.list_buildings(pid)
-            self._buildings_cache = {b["building_type"]: b["level"] for b in blds["buildings"]}
-        except APIError:
+        else:
+            self._queue_cache = queue_res
+
+        if isinstance(buildings_res, BaseException):
             self._buildings_cache = {}
-        try:
-            techs = await self.app.client.list_researches()
-            self._tech_levels_cache = {r["tech_type"]: r["level"] for r in techs["researches"]}
-        except APIError:
+        else:
+            self._buildings_cache = {
+                b["building_type"]: b["level"] for b in buildings_res["buildings"]
+            }
+
+        if isinstance(researches_res, BaseException):
             self._tech_levels_cache = {}
+        else:
+            self._tech_levels_cache = {
+                r["tech_type"]: r["level"] for r in researches_res["researches"]
+            }
+
         self._max_lab_level = self._buildings_cache.get("research_lab", 0)
-        try:
-            self._unread_count = await self.app.client.unread_count()
-        except APIError:
+
+        if isinstance(unread_res, BaseException):
             self._unread_count = 0
-        try:
-            stats = await self.app.client.stats()
-            self._online_count = int(stats.get("online", 0))
-        except APIError:
-            pass
-        try:
-            pts = await self.app.client.my_points()
-            self._defense_points = int(pts.get("defense_points", 0))
-        except APIError:
-            pass
-        try:
-            self._fleets_cache = await self.app.client.list_fleets()
-        except APIError:
+        else:
+            self._unread_count = unread_res
+
+        if not isinstance(stats_res, BaseException):
+            self._online_count = int(stats_res.get("online", 0))
+
+        if not isinstance(points_res, BaseException):
+            self._defense_points = int(points_res.get("defense_points", 0))
+
+        if isinstance(fleets_res, BaseException):
             self._fleets_cache = []
-        try:
-            self._incoming_cache = await self.app.client.list_incoming_fleets()
-        except APIError:
+        else:
+            self._fleets_cache = fleets_res
+
+        if isinstance(incoming_res, BaseException):
             self._incoming_cache = []
-        try:
-            self._quest_cache = await self.app.client.quests()
-        except APIError:
+        else:
+            self._incoming_cache = incoming_res
+
+        if isinstance(quests_res, BaseException):
             self._quest_cache = None
+        else:
+            self._quest_cache = quests_res
+
         # Autocomplete for /msg and /inbox only suggests usernames from
         # your existing threads — otherwise at 1000+ players the menu is
         # unusable. Browse the full roster via the web /players page.
-        try:
-            threads = await self.app.client.threads()
+        if not isinstance(threads_res, BaseException):
             me_username = self._username()
             partners = [
                 t["other_username"]
-                for t in threads
+                for t in threads_res
                 if t.get("other_username") and t["other_username"] != me_username
             ]
             # de-dupe preserving recency order
             seen: set[str] = set()
             self._players_cache = [u for u in partners if not (u in seen or seen.add(u))]
-        except APIError:
-            pass
+
         self._render_top_bar()
         self._render_planet_card()
         self._render_right_panel()
