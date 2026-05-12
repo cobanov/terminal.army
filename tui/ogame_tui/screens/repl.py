@@ -115,7 +115,6 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/galaxy ", "/galaxy <g>:<s>", "galaxy system view"),
     CommandSpec("/queue", "/queue", "active build/research queue"),
     CommandSpec("/cancel ", "/cancel <id>", "cancel a queue item"),
-    CommandSpec("/players", "/players", "list players in this universe"),
     CommandSpec("/msg ", "/msg <user> <text>", "send a message"),
     CommandSpec("/inbox", "/inbox [user]", "conversations (or chat with user)"),
     CommandSpec("/logs", "/logs [N]", "recent activity on this planet"),
@@ -131,14 +130,14 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/reports", "/reports [id]", "list reports or open one"),
     CommandSpec("/leaderboard", "/leaderboard", "server rankings"),
     CommandSpec("/alliances", "/alliances", "list alliances"),
-    CommandSpec("/alliance", "/alliance [tag]", "alliance detail or your own"),
+    CommandSpec(
+        "/alliance",
+        "/alliance [tag|--flag]",
+        "show alliance; flags: --requests --approve <u> --reject <u> --withdraw",
+    ),
     CommandSpec("/found ", "/found <tag> <name>", "found a new alliance"),
     CommandSpec("/join ", "/join <tag> [msg]", "apply to join an alliance"),
     CommandSpec("/leave", "/leave", "leave your alliance"),
-    CommandSpec("/requests", "/requests", "pending join requests (or yours)"),
-    CommandSpec("/approve ", "/approve <user>", "founder: approve a join request"),
-    CommandSpec("/reject ", "/reject <user>", "founder: reject a join request"),
-    CommandSpec("/withdraw", "/withdraw", "withdraw your own join request"),
     CommandSpec("/me", "/me", "show my account"),
     CommandSpec("/refresh", "/refresh", "force refresh"),
     CommandSpec("/clear", "/clear", "clear log"),
@@ -165,7 +164,6 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
   /cancel <queue_id>      cancel a queue item (refund)
 
 [bold]social[/bold]
-  /players                list players in this universe
   /msg                    show conversation list (alias of /inbox)
   /msg <user>             open chat history with that user
   /msg <user> <text>      send a private message
@@ -195,10 +193,10 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
   /found <tag> <name>     found a new alliance (tag 2-6 chars)
   /join <tag> [message]   apply to join — the founder must approve
   /leave                  leave your alliance (founder must dissolve)
-  /requests               founder: list pending applicants. else: your pending
-  /approve <user>         founder: approve a join request
-  /reject <user>          founder: reject a join request
-  /withdraw               withdraw your own pending join request
+  /alliance --requests    founder: list pending applicants; else: your own
+  /alliance --approve <u> founder: approve a join request
+  /alliance --reject <u>  founder: reject a join request
+  /alliance --withdraw    withdraw your own pending join request
 
 [bold]system[/bold]
   /me                     my account info
@@ -446,19 +444,8 @@ def _nav_text() -> Text:
             ],
         ),
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
-        ("SOCIAL", ["/msg", "/inbox", "/players"]),
-        (
-            "STANDINGS",
-            [
-                "/leaderboard",
-                "/alliances",
-                "/alliance",
-                "/requests",
-                "/approve",
-                "/reject",
-                "/withdraw",
-            ],
-        ),
+        ("SOCIAL", ["/msg", "/inbox"]),
+        ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
         ("HELP", ["/help"]),
     ]
     t = Text()
@@ -618,14 +605,27 @@ class ReplScreen(Screen):
             with Vertical(id="center-panel"):
                 yield Static("[dim]loading planet...[/dim]", id="planet-card")
                 yield RichLog(id="log", markup=True, wrap=True, auto_scroll=True)
+                yield OptionList(id="suggestions", classes="-hidden")
+                yield Input(
+                    placeholder="type / for commands, Tab to autocomplete, ↑ for history, /help, /q to quit",
+                    id="prompt",
+                    suggester=HistorySuggester(lambda: self._history),
+                )
             with Vertical(id="right-panel"):
                 yield Static("[dim]loading...[/dim]", id="right-content")
-        yield OptionList(id="suggestions", classes="-hidden")
-        yield Input(
-            placeholder="type / for commands, Tab to autocomplete, ↑ for history, /help, /q to quit",
-            id="prompt",
-            suggester=HistorySuggester(lambda: self._history),
-        )
+
+    def on_click(self, event: object) -> None:
+        """Click anywhere on the screen refocuses the prompt.
+
+        Nothing else on screen is meaningfully clickable (the log is
+        read-only, the panels are static text). The widget that received
+        the click already processed its own click logic (OptionList
+        selection, etc.) before this bubbles up to the screen.
+        """
+        try:
+            self._input.focus()
+        except Exception:
+            pass
 
     async def on_mount(self) -> None:
         self._top_left = self.query_one("#top-left", Static)
@@ -1040,7 +1040,6 @@ class ReplScreen(Screen):
             "m": "msg",
             "in": "inbox",
             "ib": "inbox",
-            "pl": "players",
             "t": "tree",
             "l": "logs",
             "log": "logs",
@@ -1063,12 +1062,6 @@ class ReplScreen(Screen):
             "rank": "leaderboard",
             "ranking": "leaderboard",
             "ally": "alliance",
-            "req": "requests",
-            "reqs": "requests",
-            "app": "approve",
-            "approval": "approve",
-            "rej": "reject",
-            "wd": "withdraw",
             "all": "alliances",
         }
         cmd = aliases.get(cmd, cmd)
@@ -1484,8 +1477,13 @@ class ReplScreen(Screen):
 
     # ------- Leaderboard / Alliance --------------------------------------
     async def _cmd_leaderboard(self, args: list[str]) -> None:
-        data = await self.app.client.leaderboard(limit=30)
+        data = await self.app.client.leaderboard(limit=100)
         my_username = self._username()
+        my_rank = data.get("my_rank")
+        my_total = data.get("my_total") or 0
+        rows = data["rows"]
+        in_top = any(r["username"] == my_username for r in rows)
+
         t = Table(show_header=True, header_style="bold yellow", box=None)
         t.add_column("#", justify="right", style="dim")
         t.add_column("player", style="bold")
@@ -1494,7 +1492,7 @@ class ReplScreen(Screen):
         t.add_column("research", justify="right", style="dim")
         t.add_column("fleet", justify="right", style="dim")
         t.add_column("total", justify="right", style="bold yellow")
-        for r in data["rows"]:
+        for r in rows:
             medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(r["rank"], str(r["rank"]))
             name = r["username"]
             if name == my_username:
@@ -1509,12 +1507,24 @@ class ReplScreen(Screen):
                 _fmt_int(r["fleet_points"]),
                 _fmt_int(r["total_points"]),
             )
+        # If I'm not in the top 100, append a divider + my row at the bottom.
+        if not in_top and my_rank is not None:
+            t.add_row("[dim]⋮[/dim]", "", "", "", "", "", "")
+            t.add_row(
+                str(my_rank),
+                f"[bold green]{my_username}[/bold green]",
+                "-",
+                "",
+                "",
+                "",
+                _fmt_int(my_total),
+            )
         self._log.write(t)
-        if data.get("my_rank"):
+        if my_rank is not None:
             self._log.write(
-                f"[dim]your rank:[/dim] [bold yellow]#{data['my_rank']}[/bold yellow] "
+                f"[dim]your rank:[/dim] [bold yellow]#{my_rank}[/bold yellow] "
                 f"of {data['total_players']}  "
-                f"[dim]({_fmt_int(data.get('my_total') or 0)} pts)[/dim]"
+                f"[dim]({_fmt_int(my_total)} pts)[/dim]"
             )
 
     async def _cmd_alliances(self, args: list[str]) -> None:
@@ -1546,8 +1556,24 @@ class ReplScreen(Screen):
             )
 
     async def _cmd_alliance(self, args: list[str]) -> None:
+        """Umbrella for everything that operates on YOUR alliance.
+
+        Forms:
+          /alliance                          show your alliance
+          /alliance <TAG>                    show another alliance
+          /alliance --requests               founder: list pending; or your own
+          /alliance --approve <user>         founder: approve a request
+          /alliance --reject <user>          founder: reject a request
+          /alliance --withdraw               cancel your own pending request
+        """
+        # Flag mode: anything starting with "--" routes to a subcommand
+        # acting on the user's own alliance.
+        flag = next((a for a in args if a.startswith("--")), None)
+        if flag is not None:
+            tail = [a for a in args if not a.startswith("--")]
+            return await self._alliance_flag(flag, tail)
+
         if not args:
-            # Show your own alliance, or fail
             my = await self.app.client.my_alliance()
             if my is None:
                 self._log.write(
@@ -1557,7 +1583,6 @@ class ReplScreen(Screen):
                 return
             await self._render_alliance(my)
             return
-        # Specific alliance by tag
         tag = args[0].upper()
         try:
             data = await self.app.client.get_alliance(tag)
@@ -1565,6 +1590,91 @@ class ReplScreen(Screen):
             self._log.write(f"[red]{exc.detail}[/red]")
             return
         await self._render_alliance(data)
+
+    async def _alliance_flag(self, flag: str, tail: list[str]) -> None:
+        flag = flag.lower()
+        if flag in ("--requests", "--reqs", "--r"):
+            return await self._alliance_requests()
+        if flag in ("--approve", "--app", "--a"):
+            return await self._alliance_decide(tail, approve=True)
+        if flag in ("--reject", "--rej"):
+            return await self._alliance_decide(tail, approve=False)
+        if flag in ("--withdraw", "--w"):
+            return await self._alliance_withdraw()
+        self._log.write(
+            f"[red]unknown flag:[/red] {flag}  "
+            "[dim]known:[/dim] [yellow]--requests --approve <user> "
+            "--reject <user> --withdraw[/yellow]"
+        )
+
+    async def _alliance_requests(self) -> None:
+        my = await self.app.client.my_alliance()
+        if my is not None and my["founder_id"] == await self._me_user_id():
+            try:
+                items = await self.app.client.list_alliance_requests(my["tag"])
+            except APIError as exc:
+                self._log.write(f"[red]{exc.detail}[/red]")
+                return
+            if not items:
+                self._log.write("[dim]no pending applications[/dim]")
+                return
+            t = Table(show_header=True, header_style="bold yellow", box=None)
+            t.add_column("applicant", style="bold")
+            t.add_column("message")
+            t.add_column("applied")
+            for r in items:
+                t.add_row(
+                    r["username"],
+                    r.get("message") or "—",
+                    _local_hhmmss(r["created_at"]),
+                )
+            self._log.write(t)
+            self._log.write(
+                "[dim]approve:[/dim] [yellow]/alliance --approve <user>[/yellow]  "
+                "[dim]reject:[/dim] [yellow]/alliance --reject <user>[/yellow]"
+            )
+            return
+
+        mine = await self.app.client.my_alliance_request()
+        if mine is None:
+            self._log.write("[dim]no pending request[/dim]")
+            return
+        self._log.write(
+            f"[yellow]pending[/yellow] [{mine['alliance_tag']}] {mine['alliance_name']} "
+            f"[dim](applied {_local_hhmmss(mine['created_at'])})[/dim]  "
+            f"[dim]withdraw:[/dim] [yellow]/alliance --withdraw[/yellow]"
+        )
+
+    async def _alliance_decide(self, tail: list[str], *, approve: bool) -> None:
+        verb = "approve" if approve else "reject"
+        if not tail:
+            self._log.write(f"[red]usage:[/red] /alliance --{verb} <username>")
+            return
+        my = await self.app.client.my_alliance()
+        if my is None or my["founder_id"] != await self._me_user_id():
+            self._log.write(f"[red]only the founder can {verb} requests[/red]")
+            return
+        username = tail[0]
+        try:
+            if approve:
+                await self.app.client.approve_alliance_request(my["tag"], username)
+            else:
+                await self.app.client.reject_alliance_request(my["tag"], username)
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        if approve:
+            self._log.write(f"[green]approved[/green] {username} into [{my['tag']}]")
+        else:
+            self._log.write(f"[yellow]rejected[/yellow] {username}")
+
+    async def _alliance_withdraw(self) -> None:
+        try:
+            await self.app.client.withdraw_alliance_request()
+        except APIError as exc:
+            self._log.write(f"[red]{exc.detail}[/red]")
+            return
+        self._log.write("[green]request withdrawn[/green]")
 
     async def _render_alliance(self, data: dict) -> None:
         header = Text()
@@ -1622,84 +1732,6 @@ class ReplScreen(Screen):
             f"{data['alliance_name']} — wait for the founder to approve"
         )
 
-    async def _cmd_requests(self, args: list[str]) -> None:
-        """Founder: list pending applications. Member: show your own request."""
-        my = await self.app.client.my_alliance()
-        if my is not None and my["founder_id"] == await self._me_user_id():
-            try:
-                items = await self.app.client.list_alliance_requests(my["tag"])
-            except APIError as exc:
-                self._log.write(f"[red]{exc.detail}[/red]")
-                return
-            if not items:
-                self._log.write("[dim]no pending applications[/dim]")
-                return
-            t = Table(show_header=True, header_style="bold yellow", box=None)
-            t.add_column("applicant", style="bold")
-            t.add_column("message")
-            t.add_column("applied")
-            for r in items:
-                t.add_row(
-                    r["username"],
-                    r.get("message") or "—",
-                    _local_hhmmss(r["created_at"]),
-                )
-            self._log.write(t)
-            self._log.write(
-                "[dim]approve:[/dim] [yellow]/approve <username>[/yellow]  "
-                "[dim]reject:[/dim] [yellow]/reject <username>[/yellow]"
-            )
-            return
-
-        # Not a founder — show my own pending request if any.
-        mine = await self.app.client.my_alliance_request()
-        if mine is None:
-            self._log.write("[dim]no pending request[/dim]")
-            return
-        self._log.write(
-            f"[yellow]pending[/yellow] [{mine['alliance_tag']}] {mine['alliance_name']} "
-            f"[dim](applied {_local_hhmmss(mine['created_at'])})[/dim]  "
-            f"[dim]withdraw:[/dim] [yellow]/withdraw[/yellow]"
-        )
-
-    async def _cmd_approve(self, args: list[str]) -> None:
-        if not args:
-            self._log.write("[red]usage:[/red] /approve <username>")
-            return
-        my = await self.app.client.my_alliance()
-        if my is None or my["founder_id"] != await self._me_user_id():
-            self._log.write("[red]only the founder can approve requests[/red]")
-            return
-        try:
-            await self.app.client.approve_alliance_request(my["tag"], args[0])
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write(f"[green]approved[/green] {args[0]} into [{my['tag']}]")
-
-    async def _cmd_reject(self, args: list[str]) -> None:
-        if not args:
-            self._log.write("[red]usage:[/red] /reject <username>")
-            return
-        my = await self.app.client.my_alliance()
-        if my is None or my["founder_id"] != await self._me_user_id():
-            self._log.write("[red]only the founder can reject requests[/red]")
-            return
-        try:
-            await self.app.client.reject_alliance_request(my["tag"], args[0])
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write(f"[yellow]rejected[/yellow] {args[0]}")
-
-    async def _cmd_withdraw(self, args: list[str]) -> None:
-        try:
-            await self.app.client.withdraw_alliance_request()
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write("[green]request withdrawn[/green]")
-
     async def _cmd_leave(self, args: list[str]) -> None:
         my = await self.app.client.my_alliance()
         if my is None:
@@ -1718,24 +1750,6 @@ class ReplScreen(Screen):
         self._log.write(
             f"[green]refreshed[/green] [dim]({_now_local_hhmmss()})[/dim] "
             f"top bar, planet card, queue, inbox, all panels"
-        )
-
-    async def _cmd_players(self, args: list[str]) -> None:
-        players = await self.app.client.list_players()
-        if not players:
-            self._log.write("[dim]no players[/dim]")
-            return
-        me_id = (getattr(self.app, "me_info", {}) or {}).get("id")
-        t = Table(show_header=True, header_style="bold yellow", box=None)
-        t.add_column("id", style="cyan")
-        t.add_column("username")
-        t.add_column("")
-        for p in players:
-            mark = "[green](you)[/green]" if p["id"] == me_id else ""
-            t.add_row(str(p["id"]), p["username"], mark)
-        self._log.write(t)
-        self._log.write(
-            "[dim]use[/dim] [cyan]/msg <username> <text>[/cyan] [dim]to send a message[/dim]"
         )
 
     async def _cmd_msg(self, args: list[str]) -> None:

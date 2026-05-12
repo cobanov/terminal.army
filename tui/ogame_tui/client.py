@@ -113,7 +113,7 @@ class OGameClient:
 
     # ----- Social ---------------------------------------------------------
     async def list_players(self) -> list[dict[str, Any]]:
-        return await self._request("GET", "/players")
+        return await self._request("GET", "/api/players")
 
     async def send_message(self, recipient: str, body: str) -> dict[str, Any]:
         return await self._request(

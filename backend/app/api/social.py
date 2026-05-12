@@ -40,9 +40,13 @@ class MessageRead(BaseModel):
     read: bool
 
 
-@router.get("/players", response_model=list[PlayerRead])
+@router.get("/api/players", response_model=list[PlayerRead])
 async def list_players(user: CurrentUser, db: DBSession) -> list[PlayerRead]:
-    """List all players in the same universe."""
+    """List all players in the same universe.
+
+    Lives at /api/players so the web /players HTML page can own the
+    short URL.
+    """
     result = await db.execute(
         select(User)
         .where(User.current_universe_id == user.current_universe_id)

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Players · sakusen{% endblock %}
+
+{% block content %}
+{% include "_topbar.html" %}
+
+<div class="card">
+  <h2 class="card-title">Players <small>{{ total }} commanders on {{ server_name }}</small></h2>
+
+  <form action="/players" method="get" style="margin-bottom:1rem; display:flex; gap:0.6rem; align-items:center;">
+    <input type="text" name="q" value="{{ q }}" placeholder="filter by username"
+           style="background:#0a0a0a; border:1px solid #1f1f1f; color:#d4d4d4; padding:0.4rem 0.7rem; font-family:ui-monospace,monospace; flex:1; max-width:320px;">
+    <button type="submit" style="width:auto; padding:0.4rem 1rem;">search</button>
+    {% if q %}<a href="/players" class="dim" style="margin-left:0.6rem;">clear</a>{% endif %}
+  </form>
+
+  {% if rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>commander</th>
+          <th>alliance</th>
+          <th>joined</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr {% if r.is_me %}style="background:#1a140a;"{% endif %}>
+          <td>
+            <b>{{ r.username }}</b>
+            {% if r.is_me %}<span class="dim">(you)</span>{% endif %}
+          </td>
+          <td>{% if r.alliance_tag %}<span style="color:#fbbf24;">[{{ r.alliance_tag }}]</span>{% else %}<span class="dim">—</span>{% endif %}</td>
+          <td class="dim">{{ r.created_at.strftime("%Y-%m-%d") if r.created_at else "?" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if pages > 1 %}
+    <p style="margin-top:1rem; display:flex; gap:0.4rem; align-items:center;">
+      {% if page > 1 %}
+        <a href="/players?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}">&larr; prev</a>
+      {% endif %}
+      <span class="dim">page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}
+        <a href="/players?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}">next &rarr;</a>
+      {% endif %}
+    </p>
+    {% endif %}
+  {% else %}
+    <p class="empty-state">{% if q %}no players match "{{ q }}"{% else %}no players{% endif %}</p>
+  {% endif %}
+</div>
+{% endblock %}

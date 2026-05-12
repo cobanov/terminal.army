@@ -497,22 +497,26 @@ async def leaderboard_page(
 
     rows = []
     my_rank: int | None = None
-    my_points: int | None = None
+    my_row: dict | None = None
     for i, (u, pts) in enumerate(scored, start=1):
-        if u.id == user.id:
+        is_me = u.id == user.id
+        row = {
+            "rank": i,
+            "user_id": u.id,
+            "username": u.username,
+            "alliance_tag": alliance_by_user.get(u.id),
+            "is_me": is_me,
+            **pts,
+        }
+        if is_me:
             my_rank = i
-            my_points = pts["total_points"]
+            my_row = row
         if i <= 100:
-            rows.append(
-                {
-                    "rank": i,
-                    "user_id": u.id,
-                    "username": u.username,
-                    "alliance_tag": alliance_by_user.get(u.id),
-                    "is_me": u.id == user.id,
-                    **pts,
-                }
-            )
+            rows.append(row)
+
+    # Only carry my_row separately when I'm OUTSIDE the top 100. Template
+    # appends it as a divider row at the bottom.
+    tail_my_row = my_row if (my_rank is not None and my_rank > 100) else None
 
     return templates.TemplateResponse(
         name="leaderboard.html",
@@ -522,7 +526,74 @@ async def leaderboard_page(
             "rows": rows,
             "total_players": len(scored),
             "my_rank": my_rank,
-            "my_points": my_points or 0,
+            "my_points": (my_row or {}).get("total_points", 0),
+            "tail_my_row": tail_my_row,
+            "server_name": get_settings().server_name,
+        },
+    )
+
+
+# ============================================================================
+# /players
+# ============================================================================
+PLAYERS_PER_PAGE = 50
+
+
+@router.get("/players", response_class=HTMLResponse)
+async def players_page(
+    request: Request,
+    db: DBSession,
+    ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
+    page: int = 1,
+    q: str | None = None,
+) -> Response:
+    user = await _user_from_cookie(ogame_token, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=302)
+
+    # Filter by username substring if provided.
+    base_q = select(User).where(User.current_universe_id == user.current_universe_id)
+    if q:
+        base_q = base_q.where(User.username.ilike(f"%{q}%"))
+
+    total_res = await db.execute(select(func.count()).select_from(base_q.subquery()))
+    total = int(total_res.scalar() or 0)
+
+    page = max(1, page)
+    offset = (page - 1) * PLAYERS_PER_PAGE
+    res = await db.execute(base_q.order_by(User.username).offset(offset).limit(PLAYERS_PER_PAGE))
+    players = list(res.scalars().all())
+
+    # Alliance tag per user
+    member_res = await db.execute(
+        select(AllianceMember.user_id, Alliance.tag).join(
+            Alliance, Alliance.id == AllianceMember.alliance_id
+        )
+    )
+    alliance_by_user: dict[int, str] = {uid: tag for uid, tag in member_res.all()}
+
+    rows = [
+        {
+            "id": p.id,
+            "username": p.username,
+            "alliance_tag": alliance_by_user.get(p.id),
+            "is_me": p.id == user.id,
+            "created_at": p.created_at,
+        }
+        for p in players
+    ]
+    pages = max(1, (total + PLAYERS_PER_PAGE - 1) // PLAYERS_PER_PAGE)
+
+    return templates.TemplateResponse(
+        name="players.html",
+        request=request,
+        context={
+            "request": request,
+            "rows": rows,
+            "total": total,
+            "page": page,
+            "pages": pages,
+            "q": q or "",
             "server_name": get_settings().server_name,
         },
     )
