@@ -29,6 +29,7 @@ from backend.app.api.stats import router as stats_router
 from backend.app.api.universe import router as universe_router
 from backend.app.api.web import router as web_router
 from backend.app.config import get_settings
+from backend.app.csrf import CSRFOriginMiddleware
 from backend.app.db import AsyncSessionLocal, init_db
 from backend.app.rate_limit import limiter
 from backend.app.scheduler import start_scheduler, stop_scheduler
@@ -90,6 +91,12 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    # CSRF: cookie-bearing mutating requests must come from an origin in
+    # our allow-list (CORS_ORIGINS) or from the same origin as the
+    # request itself. Bearer-token API calls aren't affected.
+    csrf_origins = [o.strip() for o in raw.split(",") if o.strip() and o.strip() != "*"]
+    app.add_middleware(CSRFOriginMiddleware, allowed_origins=csrf_origins)
 
     # Rate limiting. Endpoints opt in via `@limiter.limit(...)`; everything
     # else stays unbounded. Slowapi exposes the limiter as app.state.limiter
