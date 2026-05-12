@@ -454,15 +454,11 @@ def _nav_text() -> Text:
             t.append("\n")
         t.append(f"{title}\n", style="bold yellow")
         for cmd in cmds:
-            # match the matching CommandSpec for the display label
+            # Look up the CommandSpec whose completion is exactly `cmd`
+            # (no args) or `cmd ` (takes args). A naive prefix match used
+            # to alias /alliance to /alliances since they share a prefix.
             spec = next(
-                (
-                    s
-                    for s in COMMANDS
-                    if s.completion.rstrip().rstrip("/").startswith(cmd)
-                    or s.completion.strip() == cmd
-                    or s.completion.strip() == cmd + " "
-                ),
+                (s for s in COMMANDS if s.completion in (cmd, f"{cmd} ")),
                 None,
             )
             label = spec.label if spec else cmd
