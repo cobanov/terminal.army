@@ -454,15 +454,10 @@ def _nav_text() -> Text:
             t.append("\n")
         t.append(f"{title}\n", style="bold yellow")
         for cmd in cmds:
-            # Look up the CommandSpec whose completion is exactly `cmd`
-            # (no args) or `cmd ` (takes args). A naive prefix match used
-            # to alias /alliance to /alliances since they share a prefix.
-            spec = next(
-                (s for s in COMMANDS if s.completion in (cmd, f"{cmd} ")),
-                None,
-            )
-            label = spec.label if spec else cmd
-            t.append(f"  {label}\n", style="cyan")
+            # Sidebar shows the bare command name only — argument hints
+            # (<g>:<s>:<p> etc.) live in /help and the autocomplete popup,
+            # not in the always-visible nav.
+            t.append(f"  {cmd}\n", style="cyan")
     t.append("\n")
     t.append("HOTKEYS\n", style="bold yellow")
     t.append("  Tab    complete\n", style="dim")
