@@ -1,13 +1,85 @@
 {% extends "base.html" %}
-{% block title %}sakusen — pick a server{% endblock %}
-{% block shell_class %}login-shell{% endblock %}
+{% block title %}sakusen — terminal space strategy{% endblock %}
+{% block shell_class %}lobby-shell{% endblock %}
 
 {% block content %}
-<div class="login-container">
+{# Lobby topbar: brand left, login / sign up buttons right. If exactly one
+   shard is live, the buttons go straight to it; otherwise they anchor-jump
+   to the picker. #}
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">SAKUSEN</span>
+    <span class="topbar-user">terminal space strategy</span>
+  </div>
+  <div class="topbar-right">
+    {% if primary_shard_url %}
+      <a class="btn-ghost" href="{{ primary_shard_url }}/login">login</a>
+      <a class="btn-primary" href="{{ primary_shard_url }}/signup">sign up &rarr;</a>
+    {% else %}
+      <a class="btn-ghost" href="#servers">login</a>
+      <a class="btn-primary" href="#servers">sign up &rarr;</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="lobby-hero">
   {% include "_logo.html" %}
+</div>
+
+<div class="lobby-content">
+  {# Single column of cards, centered. #}
 
   <div class="card">
-    <h2 class="card-title">Servers <small>pick a universe to play in</small></h2>
+    <h2 class="card-title">Install <small>one terminal, one command</small></h2>
+    <p class="hint" style="margin-bottom:0.6rem;">Install the sakusen CLI:</p>
+    <pre class="key">uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"</pre>
+    <p class="hint" style="margin:1rem 0 0.6rem 0;">Point at a server and run:</p>
+    <pre class="key">export SAKUSEN_BACKEND="{% if primary_shard_url %}{{ primary_shard_url }}{% else %}https://s1.sakusen.space{% endif %}"
+sakusen</pre>
+    <p class="hint" style="margin-top:1rem;">
+      Need <code>uv</code>? <code>curl -LsSf https://astral.sh/uv/install.sh | sh</code>.
+      On first launch the CLI opens a browser URL — sign in there, the TUI takes
+      over once you're authenticated.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Rankings <small>top {{ rankings|length }} commanders across all servers</small></h2>
+    {% if rankings %}
+      <table>
+        <thead>
+          <tr>
+            <th class="right">#</th>
+            <th>commander</th>
+            <th>alliance</th>
+            <th>server</th>
+            <th class="right">points</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rankings %}
+          <tr>
+            <td class="right" style="font-family:ui-monospace,monospace;">
+              {% if r.rank == 1 %}<span style="color:#fbbf24;">{{ r.rank }}</span>
+              {% elif r.rank == 2 %}<span style="color:#a3a3a3;">{{ r.rank }}</span>
+              {% elif r.rank == 3 %}<span style="color:#b87333;">{{ r.rank }}</span>
+              {% else %}<span class="dim">{{ r.rank }}</span>{% endif %}
+            </td>
+            <td><b>{{ r.username }}</b></td>
+            <td>{% if r.alliance_tag %}<span style="color:#fbbf24;">[{{ r.alliance_tag }}]</span>{% else %}<span class="dim">—</span>{% endif %}</td>
+            <td><a href="{{ r.server_url }}" style="color:#fbbf24;">{{ r.server }}</a></td>
+            <td class="right" style="font-family:ui-monospace,monospace;">{{ fmt_int(r.total_points) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">No players yet. Be the first to sign up.</p>
+    {% endif %}
+  </div>
+
+  <div class="card" id="servers">
+    <h2 class="card-title">Servers <small>pick a universe</small></h2>
     <div class="server-grid">
       {% for s in lobby_servers %}
         {% if s.coming_soon %}
@@ -60,36 +132,6 @@
         {% endif %}
       {% endfor %}
     </div>
-    <p class="hint" style="margin-top:1rem;">
-      Each server is an independent universe with its own galaxy and its own player list.
-      Pick one and your account lives only on that server.
-    </p>
-  </div>
-
-  <div class="card">
-    <h2 class="card-title">What is this <small>tldr</small></h2>
-    <p>
-      A terminal-native multiplayer space strategy game in the spirit of OGame.
-      You play from your terminal via the <code>sakusen</code> CLI — every action
-      is a slash-command. Resources accrue in real time. Multiple players share
-      the same universe and can attack, spy on, and message each other.
-    </p>
-  </div>
-
-  <div class="card">
-    <h2 class="card-title">Install <small>one terminal, one command</small></h2>
-
-    <p class="hint" style="margin-bottom:0.8rem;">1. Install <code>uv</code> if you don't have it:</p>
-    <pre class="key">curl -LsSf https://astral.sh/uv/install.sh | sh</pre>
-
-    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">2. Install the sakusen client:</p>
-    <pre class="key">uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"</pre>
-
-    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">3. Point at the server you picked above (add to your shell rc):</p>
-    <pre class="key">export SAKUSEN_BACKEND="https://s1.sakusen.space"</pre>
-
-    <p class="hint" style="margin-bottom:0.8rem; margin-top:1rem;">4. Start playing:</p>
-    <pre class="key">sakusen</pre>
   </div>
 
   <p class="switch" style="margin-top:2rem;">

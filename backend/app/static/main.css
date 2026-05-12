@@ -449,3 +449,52 @@ td.muted { color: #525252; font-style: italic; }
   background: #111;
   color: #ef4444;
 }
+
+/* ---- Lobby topbar buttons ---------------------------------------------- */
+.btn-ghost, .btn-primary {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid #1f1f1f;
+  margin-left: 0.6rem;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.btn-ghost {
+  color: #d4d4d4;
+}
+.btn-ghost:hover {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+.btn-primary {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+.btn-primary:hover {
+  background: #fbbf24;
+  color: #0a0a0a;
+}
+
+/* ---- Lobby (sakusen.space root) landing layout ------------------------- */
+.lobby-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+.lobby-hero {
+  text-align: center;
+  margin: 2.5rem 0 1.5rem 0;
+}
+.lobby-hero .logo,
+.lobby-hero .tagline {
+  margin-left: auto;
+  margin-right: auto;
+}
+.lobby-content {
+  max-width: 760px;
+  margin: 0 auto;
+}

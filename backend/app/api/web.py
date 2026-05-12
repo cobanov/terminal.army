@@ -165,13 +165,59 @@ async def _poll_lobby_servers(servers: list[tuple[str, str, bool]]) -> list[dict
     return out
 
 
+async def _poll_lobby_rankings(
+    servers: list[tuple[str, str, bool]], limit: int = 20
+) -> list[dict]:
+    """Fetch each live shard's /api/leaderboard/public and merge by points."""
+    merged: list[dict] = []
+    async with httpx.AsyncClient(timeout=2.5) as client:
+        for name, url, coming_soon in servers:
+            if coming_soon:
+                continue
+            try:
+                r = await client.get(
+                    f"{url.rstrip('/')}/api/leaderboard/public",
+                    params={"limit": limit},
+                )
+                data = r.json()
+                for row in data.get("rows", []):
+                    merged.append({
+                        "server": name,
+                        "server_url": url,
+                        "username": row["username"],
+                        "alliance_tag": row.get("alliance_tag"),
+                        "total_points": int(row["total_points"]),
+                    })
+            except Exception:
+                continue
+    merged.sort(key=lambda r: r["total_points"], reverse=True)
+    for i, row in enumerate(merged[:limit], start=1):
+        row["rank"] = i
+    return merged[:limit]
+
+
+def _primary_shard_url(lobby_servers: list[dict]) -> str | None:
+    """If there's exactly one live, non-full shard, return its URL.
+
+    Used to auto-route lobby Login / Sign-up buttons when the picker has
+    only one viable option.
+    """
+    live = [s for s in lobby_servers if not s.get("coming_soon") and not s.get("unreachable") and not s.get("full")]
+    if len(live) == 1:
+        return live[0]["url"]
+    return None
+
+
 async def _render_lobby(request: Request) -> Response:
     settings = get_settings()
     parsed = _parse_lobby_servers(settings.lobby_servers)
     lobby_servers = await _poll_lobby_servers(parsed)
+    rankings = await _poll_lobby_rankings(parsed)
     return templates.TemplateResponse(name="lobby.html", request=request, context={
         "request": request,
         "lobby_servers": lobby_servers,
+        "rankings": rankings,
+        "primary_shard_url": _primary_shard_url(lobby_servers),
     })
 
 
