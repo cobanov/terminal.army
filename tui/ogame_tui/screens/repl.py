@@ -21,13 +21,16 @@ from textual.widgets.option_list import Option
 from ogame_tui.client import APIError
 
 # ---------- Catalog -------------------------------------------------------
-_BUILDING_KEYS = [
+_RESOURCE_KEYS = [
     "metal_mine", "crystal_mine", "deuterium_synthesizer",
-    "solar_plant", "fusion_reactor", "solar_satellite",
-    "robotics_factory", "shipyard", "research_lab",
+    "solar_plant", "fusion_reactor", "solar_satellite", "crawler",
     "metal_storage", "crystal_storage", "deuterium_tank",
-    "nanite_factory", "missile_silo", "alliance_depot", "terraformer",
 ]
+_FACILITY_KEYS = [
+    "robotics_factory", "shipyard", "research_lab",
+    "alliance_depot", "missile_silo", "nanite_factory", "terraformer",
+]
+_BUILDING_KEYS = _RESOURCE_KEYS + _FACILITY_KEYS
 _TECH_KEYS = [
     "energy", "laser", "ion", "hyperspace", "plasma",
     "computer", "astrophysics", "espionage",
@@ -78,7 +81,9 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/planets",    "/planets",         "list my planets"),
     CommandSpec("/planet",     "/planet",          "current planet detail"),
     CommandSpec("/switch ",    "/switch <id>",     "change active planet"),
-    CommandSpec("/buildings",  "/buildings",       "building levels + next cost"),
+    CommandSpec("/buildings",  "/buildings",       "all buildings (resources + facilities)"),
+    CommandSpec("/resources",  "/resources",       "mines, energy, storage, crawlers"),
+    CommandSpec("/facilities", "/facilities",      "industry, research, depots"),
     CommandSpec("/upgrade ",   "/upgrade <type>",  "upgrade a building (+1)"),
     CommandSpec("/research",   "/research [type]", "list tech or upgrade one"),
     CommandSpec("/tree",       "/tree",            "tech tree with prereqs"),
@@ -91,6 +96,8 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/logs",       "/logs [N]",        "recent activity on this planet"),
     CommandSpec("/ships",      "/ships",           "ships in shipyard + buildable"),
     CommandSpec("/build ",     "/build <type> <n>", "build N ships in shipyard"),
+    CommandSpec("/defense",    "/defense",          "planetary defenses + buildable"),
+    CommandSpec("/defend ",    "/defend <type> <n>", "build N defenses on planet"),
     CommandSpec("/fleets",     "/fleets",          "active fleet movements"),
     CommandSpec("/send",       "/send",            "fleet send wizard (see /help)"),
     CommandSpec("/espionage ", "/espionage <g>:<s>:<p>", "send probes to target"),
@@ -111,13 +118,15 @@ COMMANDS: list[CommandSpec] = [
 ]
 
 
-HELP_TEXT = """[bold yellow]sakusen 策戦 · commands[/bold yellow]
+HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]gameplay[/bold]
   /planets                list my planets
   /planet                 current planet detail
   /switch <id>            change active planet
-  /buildings              building levels + next cost
+  /buildings              all buildings (resources + facilities)
+  /resources              mines, energy, storage, crawlers
+  /facilities             industry, research, depots
   /upgrade <type>         upgrade a building (+1 level)
   /research               list all technologies
   /research <type>        research a technology
@@ -139,6 +148,8 @@ HELP_TEXT = """[bold yellow]sakusen 策戦 · commands[/bold yellow]
 [bold]fleet & combat[/bold]
   /ships                  list ships in shipyard + buildable types
   /build <ship> <count>   construct ships at current planet's shipyard
+/defense                planetary defenses + buildable structures
+/defend <type> <n>      build N defenses (e.g. /defend rocket_launcher 20)
   /fleets                 active fleet movements
   /espionage <g>:<s>:<p>  send espionage probe to target
   /attack <g>:<s>:<p> <ship>:<n> ...   attack a target
@@ -345,9 +356,9 @@ def _short_dt(iso_str: str) -> str:
 def _nav_text() -> Text:
     """Categorized nav: PLANET / RESEARCH / FLEET / GALAXY / SOCIAL / HELP."""
     sections: list[tuple[str, list[str]]] = [
-        ("PLANET", ["/planet", "/buildings", "/upgrade", "/queue", "/cancel"]),
+        ("PLANET", ["/planet", "/resources", "/facilities", "/upgrade", "/queue", "/cancel"]),
         ("RESEARCH", ["/research", "/tree"]),
-        ("FLEET", ["/ships", "/build", "/fleets", "/espionage", "/attack", "/transport", "/reports"]),
+        ("FLEET", ["/ships", "/build", "/defense", "/defend", "/fleets", "/espionage", "/attack", "/transport", "/reports"]),
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", ["/msg", "/inbox", "/players"]),
         ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
@@ -522,7 +533,7 @@ class ReplScreen(Screen):
         self._input = self.query_one("#prompt", Input)
         self._suggestions = self.query_one("#suggestions", OptionList)
 
-        self._log.write("[bold yellow]sakusen 策戦[/bold yellow]")
+        self._log.write("[bold yellow]sakusen[/bold yellow]")
         self._log.write("[dim]Type / to see commands, Tab to autocomplete, Enter to run.[/dim]")
         self._log.write("")
 
@@ -909,6 +920,7 @@ class ReplScreen(Screen):
             "h": "help", "?": "help",
             "p": "planet", "ps": "planets",
             "b": "buildings", "bld": "buildings",
+            "rs": "resources", "fc": "facilities", "fac": "facilities",
             "u": "upgrade",
             "r": "research", "res": "research",
             "g": "galaxy",
@@ -920,6 +932,8 @@ class ReplScreen(Screen):
             "l": "logs", "log": "logs", "activity": "logs",
             "sh": "ships", "shp": "ships",
             "bs": "build",
+            "def": "defense", "defs": "defense",
+            "dfd": "defend",
             "f": "fleets", "fl": "fleets",
             "esp": "espionage", "spy": "espionage",
             "atk": "attack",
@@ -1036,7 +1050,9 @@ class ReplScreen(Screen):
         )
         self._log.write(t)
 
-    async def _cmd_buildings(self, args: list[str]) -> None:
+    async def _render_buildings(
+        self, title: str, keys: list[str] | None = None
+    ) -> None:
         pid = self._require_planet()
         if pid is None:
             return
@@ -1046,6 +1062,7 @@ class ReplScreen(Screen):
         cur_c = snap.get("resources_crystal", 0)
         cur_d = snap.get("resources_deuterium", 0)
 
+        self._log.write(f"[bold yellow]{title}[/bold yellow]")
         t = Table(show_header=True, header_style="bold yellow", box=None)
         t.add_column("building")
         t.add_column("lvl", justify="right")
@@ -1053,7 +1070,14 @@ class ReplScreen(Screen):
         t.add_column("crystal", justify="right")
         t.add_column("deut", justify="right")
         t.add_column("time")
-        for b in data["buildings"]:
+        # If a key list is supplied, render in that exact order; otherwise
+        # render server order so legacy /buildings keeps its layout.
+        if keys is not None:
+            by_key = {b["building_type"]: b for b in data["buildings"]}
+            rows = [by_key[k] for k in keys if k in by_key]
+        else:
+            rows = data["buildings"]
+        for b in rows:
             cm, cc, cd = b["next_cost_metal"], b["next_cost_crystal"], b["next_cost_deuterium"]
             affordable = cur_m >= cm and cur_c >= cc and cur_d >= cd
             style = "" if affordable else "dim"
@@ -1067,6 +1091,15 @@ class ReplScreen(Screen):
                 Text(_fmt_seconds(b["next_build_seconds"]), style=style or ""),
             )
         self._log.write(t)
+
+    async def _cmd_buildings(self, args: list[str]) -> None:
+        await self._render_buildings("all buildings")
+
+    async def _cmd_resources(self, args: list[str]) -> None:
+        await self._render_buildings("resources", _RESOURCE_KEYS)
+
+    async def _cmd_facilities(self, args: list[str]) -> None:
+        await self._render_buildings("facilities", _FACILITY_KEYS)
 
     async def _cmd_upgrade(self, args: list[str]) -> None:
         pid = self._require_planet()
@@ -1618,6 +1651,74 @@ class ReplScreen(Screen):
         r = await self.app.client.build_ship(pid, ship, count)
         self._log.write(
             f"[green]queued[/green] {count}x {ship}  "
+            f"cost {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}  "
+            f"done at [yellow]{_local_hhmmss(r['finished_at'])}[/yellow] "
+            f"([dim]{_remaining_str(r['finished_at'])}[/dim])"
+        )
+
+    async def _cmd_defense(self, args: list[str]) -> None:
+        pid = self._require_planet()
+        if pid is None:
+            return
+        data = await self.app.client.list_defenses(pid)
+        snap = self._snapshot or {}
+        cur_m = snap.get("resources_metal", 0)
+        cur_c = snap.get("resources_crystal", 0)
+        cur_d = snap.get("resources_deuterium", 0)
+
+        t = Table(show_header=True, header_style="bold yellow", box=None)
+        t.add_column("structure", style="bold")
+        t.add_column("have", justify="right")
+        t.add_column("metal", justify="right")
+        t.add_column("crystal", justify="right")
+        t.add_column("deut", justify="right")
+        t.add_column("hull", justify="right")
+        t.add_column("shld", justify="right")
+        t.add_column("atk", justify="right")
+        t.add_column("status")
+        for s in data["defenses"]:
+            avail = s["prereq_met"]
+            base = "" if avail else "dim"
+            if not avail:
+                stat = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="red")
+            elif s["unique"] and s["count"] >= 1:
+                stat = Text("built (max 1)", style="dim")
+            elif cur_m < s["cost_metal"] or cur_c < s["cost_crystal"] or cur_d < s["cost_deuterium"]:
+                stat = Text("need resources", style="yellow")
+            else:
+                stat = Text("ready", style="green")
+            label = s["defense_type"] + (" *" if s["unique"] else "")
+            t.add_row(
+                Text(label, style="bold" if avail else "dim"),
+                Text(str(s["count"]), style=base or "yellow"),
+                Text(_fmt_int(s["cost_metal"]), style=base or "yellow"),
+                Text(_fmt_int(s["cost_crystal"]), style=base or "cyan"),
+                Text(_fmt_int(s["cost_deuterium"]), style=base or "magenta"),
+                Text(_fmt_int(s["structural_integrity"]), style=base or "dim"),
+                Text(_fmt_int(s["shield_power"]), style=base or "dim"),
+                Text(_fmt_int(s["weapon_power"]), style=base or "dim"),
+                stat,
+            )
+        self._log.write(Text(f"Shipyard L{data['shipyard_level']}  [* = unique, max 1]", style="bold yellow"))
+        self._log.write(t)
+        self._log.write("[dim]build:[/dim] [yellow]/defend <defense_type> <count>[/yellow]")
+
+    async def _cmd_defend(self, args: list[str]) -> None:
+        pid = self._require_planet()
+        if pid is None:
+            return
+        if len(args) < 2:
+            self._log.write("[red]usage:[/red] /defend <defense_type> <count>  (e.g. /defend rocket_launcher 20)")
+            return
+        dtype = args[0].lower()
+        try:
+            count = int(args[1])
+        except ValueError:
+            self._log.write("[red]count must be integer[/red]")
+            return
+        r = await self.app.client.build_defense(pid, dtype, count)
+        self._log.write(
+            f"[green]queued[/green] {count}x {dtype}  "
             f"cost {r['cost_metal']}/{r['cost_crystal']}/{r['cost_deuterium']}  "
             f"done at [yellow]{_local_hhmmss(r['finished_at'])}[/yellow] "
             f"([dim]{_remaining_str(r['finished_at'])}[/dim])"

@@ -19,12 +19,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.api.device import bind_token_to_code
 from backend.app.config import get_settings
 from backend.app.deps import DBSession
-from backend.app.game.constants import BUILDING_LABELS, BuildingType
+from backend.app.game.constants import (
+    BUILDING_LABELS,
+    DEFENSE_LABELS,
+    FACILITY_BUILDINGS,
+    RESOURCE_BUILDINGS,
+    BuildingType,
+    DefenseType,
+)
 from backend.app.models.alliance import Alliance, AllianceMember, AllianceRole
 from backend.app.models.building import Building
 from backend.app.models.message import Message
 from backend.app.models.planet import Planet
 from backend.app.models.queue import BuildQueue
+from backend.app.models.ship import PlanetDefense
 from backend.app.models.user import User
 from backend.app.security import create_access_token, decode_token, hash_password, verify_password
 from backend.app.services.resource_service import refresh_planet_resources
@@ -98,21 +106,39 @@ async def _registered_count(db: AsyncSession) -> int:
 # ============================================================================
 # Lobby helpers
 # ============================================================================
-def _parse_lobby_servers(spec: str) -> list[tuple[str, str]]:
-    out: list[tuple[str, str]] = []
+def _parse_lobby_servers(spec: str) -> list[tuple[str, str, bool]]:
+    """Return list of (id, url, coming_soon).
+
+    Format: `id=url[:coming-soon][,id2=url2[:coming-soon]]`.
+    """
+    out: list[tuple[str, str, bool]] = []
     for entry in spec.split(","):
         entry = entry.strip()
         if not entry or "=" not in entry:
             continue
-        name, url = entry.split("=", 1)
-        out.append((name.strip(), url.strip()))
+        name, rest = entry.split("=", 1)
+        rest = rest.strip()
+        coming_soon = False
+        if rest.endswith(":coming-soon"):
+            rest = rest[: -len(":coming-soon")]
+            coming_soon = True
+        out.append((name.strip(), rest.strip(), coming_soon))
     return out
 
 
-async def _poll_lobby_servers(servers: list[tuple[str, str]]) -> list[dict]:
+async def _poll_lobby_servers(servers: list[tuple[str, str, bool]]) -> list[dict]:
     out: list[dict] = []
     async with httpx.AsyncClient(timeout=2.0) as client:
-        for name, url in servers:
+        for name, url, coming_soon in servers:
+            if coming_soon:
+                out.append({
+                    "name": name, "url": url,
+                    "description": "",
+                    "registered": 0, "max_users": 0, "full": False,
+                    "color": "#525252", "unreachable": False,
+                    "coming_soon": True,
+                })
+                continue
             try:
                 r = await client.get(f"{url.rstrip('/')}/stats")
                 stats = r.json()
@@ -126,6 +152,7 @@ async def _poll_lobby_servers(servers: list[tuple[str, str]]) -> list[dict]:
                     "description": stats.get("description", ""),
                     "registered": reg, "max_users": cap, "full": full,
                     "color": color, "unreachable": False,
+                    "coming_soon": False,
                 })
             except Exception:
                 out.append({
@@ -133,8 +160,19 @@ async def _poll_lobby_servers(servers: list[tuple[str, str]]) -> list[dict]:
                     "description": "",
                     "registered": 0, "max_users": 0, "full": False,
                     "color": "#525252", "unreachable": True,
+                    "coming_soon": False,
                 })
     return out
+
+
+async def _render_lobby(request: Request) -> Response:
+    settings = get_settings()
+    parsed = _parse_lobby_servers(settings.lobby_servers)
+    lobby_servers = await _poll_lobby_servers(parsed)
+    return templates.TemplateResponse(name="lobby.html", request=request, context={
+        "request": request,
+        "lobby_servers": lobby_servers,
+    })
 
 
 # ============================================================================
@@ -146,6 +184,9 @@ async def root(
     db: DBSession,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
+    settings = get_settings()
+    if settings.is_lobby:
+        return await _render_lobby(request)
     user = await _user_from_cookie(ogame_token, db)
     if user is not None:
         return RedirectResponse("/dashboard", status_code=302)
@@ -158,19 +199,14 @@ async def install_page(
     db: DBSession,
 ) -> Response:
     settings = get_settings()
+    if settings.is_lobby:
+        return await _render_lobby(request)
     host = request.headers.get("host", "sakusen.space")
     proto = "https" if request.url.scheme == "https" else "http"
     backend_url = f"{proto}://{host}"
-
-    lobby_servers: list[dict] = []
-    if settings.lobby_servers.strip():
-        parsed = _parse_lobby_servers(settings.lobby_servers)
-        lobby_servers = await _poll_lobby_servers(parsed)
-
     return templates.TemplateResponse(name="install.html", request=request, context={
             "request": request,
             "backend_url": backend_url,
-            "lobby_servers": lobby_servers,
         },
     )
 
@@ -184,6 +220,8 @@ async def login_page(
     ok: str | None = None,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
+    if get_settings().is_lobby:
+        return await _render_lobby(request)
     if not code:
         user = await _user_from_cookie(ogame_token, db)
         if user is not None:
@@ -201,6 +239,8 @@ async def signup_page(
     ok: str | None = None,
     ogame_token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
 ) -> Response:
+    if get_settings().is_lobby:
+        return await _render_lobby(request)
     if not code:
         user = await _user_from_cookie(ogame_token, db)
         if user is not None:
@@ -375,17 +415,41 @@ async def dashboard(
     bld_res = await db.execute(
         select(Building).where(Building.planet_id == planet.id)
     )
-    buildings_raw = list(bld_res.scalars().all())
-    # Sort by level desc, then by display label
-    buildings = []
-    for b in buildings_raw:
-        try:
-            label = BUILDING_LABELS[BuildingType(b.building_type)]
-        except (ValueError, KeyError):
-            label = b.building_type
-        buildings.append({"label": label, "level": b.level})
-    buildings.sort(key=lambda r: (-r["level"], r["label"]))
-    built_count = sum(1 for b in buildings if b["level"] > 0)
+    levels_by_type: dict[str, int] = {
+        b.building_type: b.level for b in bld_res.scalars().all()
+    }
+
+    def _bucket(types: tuple[BuildingType, ...]) -> list[dict]:
+        rows = []
+        for bt in types:
+            rows.append({
+                "key": bt.value,
+                "label": BUILDING_LABELS[bt],
+                "level": levels_by_type.get(bt.value, 0),
+            })
+        return rows
+
+    resources = _bucket(RESOURCE_BUILDINGS)
+    facilities = _bucket(FACILITY_BUILDINGS)
+
+    def_res = await db.execute(
+        select(PlanetDefense).where(PlanetDefense.planet_id == planet.id)
+    )
+    def_by_type: dict[str, int] = {
+        d.defense_type: d.count for d in def_res.scalars().all()
+    }
+    defenses = [
+        {
+            "key": dt.value,
+            "label": DEFENSE_LABELS[dt],
+            "count": def_by_type.get(dt.value, 0),
+        }
+        for dt in DefenseType
+    ]
+    defense_total = sum(d["count"] for d in defenses)
+    built_count = sum(
+        1 for r in resources + facilities if r["level"] > 0
+    )
 
     queue_res = await db.execute(
         select(BuildQueue)
@@ -422,7 +486,10 @@ async def dashboard(
             "current_planet": planet,
             "all_planets": planets,
             "production": report,
-            "buildings": buildings,
+            "resources": resources,
+            "facilities": facilities,
+            "defenses": defenses,
+            "defense_total": defense_total,
             "built_count": built_count,
             "active_queue": active_queue,
             "logs": logs,

@@ -7,12 +7,12 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.game.constants import BuildingType, ShipType, TechType
+from backend.app.game.constants import BuildingType, DefenseType, ShipType, TechType
 from backend.app.models.building import Building
 from backend.app.models.planet import Planet
 from backend.app.models.queue import BuildQueue, QueueType
 from backend.app.models.research import Research
-from backend.app.models.ship import PlanetShip
+from backend.app.models.ship import PlanetDefense, PlanetShip
 
 
 async def process_completed_queue(db: AsyncSession, now: datetime | None = None) -> int:
@@ -35,6 +35,8 @@ async def process_completed_queue(db: AsyncSession, now: datetime | None = None)
             await _apply_research(db, item)
         elif item.queue_type == QueueType.SHIP.value:
             await _apply_ship(db, item)
+        elif item.queue_type == QueueType.DEFENSE.value:
+            await _apply_defense(db, item)
         else:
             continue
         item.applied = True
@@ -86,6 +88,26 @@ async def _apply_ship(db: AsyncSession, item: BuildQueue) -> None:
         db.add(ship_row)
         await db.flush()
     ship_row.count += item.target_level  # count field reused
+
+
+async def _apply_defense(db: AsyncSession, item: BuildQueue) -> None:
+    """Add `target_level` (used as count) defenses of `item_key` to planet."""
+    try:
+        dt = DefenseType(item.item_key)
+    except ValueError:
+        return
+    result = await db.execute(
+        select(PlanetDefense).where(
+            PlanetDefense.planet_id == item.planet_id,
+            PlanetDefense.defense_type == dt.value,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        row = PlanetDefense(planet_id=item.planet_id, defense_type=dt.value, count=0)
+        db.add(row)
+        await db.flush()
+    row.count += item.target_level
 
 
 async def _apply_research(db: AsyncSession, item: BuildQueue) -> None:

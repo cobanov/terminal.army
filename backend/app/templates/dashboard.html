@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · sakusen 策戦{% endblock %}
+{% block title %}Dashboard · sakusen{% endblock %}
 
 {% block content %}
 {% include "_topbar.html" %}
@@ -131,11 +131,11 @@
 
   <div>
     <div class="card">
-      <h2 class="card-title">Buildings <small>{{ built_count }} built</small></h2>
+      <h2 class="card-title">Resources <small>mines, energy, storage</small></h2>
       <table>
         <thead><tr><th>building</th><th class="right">level</th></tr></thead>
         <tbody>
-          {% for b in buildings %}
+          {% for b in resources %}
           <tr>
             <td class="{% if b.level == 0 %}muted{% endif %}">{{ b.label }}</td>
             <td class="right {% if b.level == 0 %}muted{% endif %}">L{{ b.level }}</td>
@@ -143,6 +143,37 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Facilities <small>industry &amp; research</small></h2>
+      <table>
+        <thead><tr><th>building</th><th class="right">level</th></tr></thead>
+        <tbody>
+          {% for b in facilities %}
+          <tr>
+            <td class="{% if b.level == 0 %}muted{% endif %}">{{ b.label }}</td>
+            <td class="right {% if b.level == 0 %}muted{% endif %}">L{{ b.level }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Defenses <small>{{ defense_total }} units stationed</small></h2>
+      <table>
+        <thead><tr><th>structure</th><th class="right">count</th></tr></thead>
+        <tbody>
+          {% for d in defenses %}
+          <tr>
+            <td class="{% if d.count == 0 %}muted{% endif %}">{{ d.label }}</td>
+            <td class="right {% if d.count == 0 %}muted{% endif %}">{{ d.count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint" style="margin-top:0.6rem;">Build defenses via TUI: <code>/defense</code> / <code>/defend &lt;type&gt; &lt;n&gt;</code></p>
     </div>
   </div>
 </div>

@@ -168,6 +168,19 @@ class OGameClient:
             json={"count": count},
         )
 
+    # ----- Defense -------------------------------------------------------
+    async def list_defenses(self, planet_id: int) -> dict[str, Any]:
+        return await self._request("GET", f"/planets/{planet_id}/defenses")
+
+    async def build_defense(
+        self, planet_id: int, defense_type: str, count: int
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"/planets/{planet_id}/defense/build/{defense_type}",
+            json={"count": count},
+        )
+
     # ----- Fleets ---------------------------------------------------------
     async def send_fleet(
         self,

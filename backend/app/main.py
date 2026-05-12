@@ -11,6 +11,7 @@ from backend.app.api.admin_ui import router as admin_ui_router
 from backend.app.api.alliance import router as alliance_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.building import router as building_router
+from backend.app.api.defense import router as defense_router
 from backend.app.api.device import router as device_router
 from backend.app.api.fleet import router as fleet_router
 from backend.app.api.galaxy import router as galaxy_router
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(galaxy_router)
     app.include_router(social_router)
     app.include_router(shipyard_router)
+    app.include_router(defense_router)
     app.include_router(fleet_router)
     app.include_router(admin_router)
     app.include_router(admin_ui_router)

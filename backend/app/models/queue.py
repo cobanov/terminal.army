@@ -13,6 +13,7 @@ class QueueType(StrEnum):
     BUILDING = "building"
     RESEARCH = "research"
     SHIP = "ship"
+    DEFENSE = "defense"
 
 
 class BuildQueue(Base):
