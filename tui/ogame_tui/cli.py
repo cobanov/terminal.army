@@ -18,6 +18,11 @@ from ogame_tui import credentials as creds
 DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "sakusen"
 LEGACY_DATA_DIR = Path.home() / ".local" / "share" / "ogame"
 
+# Default public deployment. End users don't have to configure anything —
+# `sakusen` with no args connects here. Override with SAKUSEN_BACKEND or
+# --remote for self-hosted shards.
+DEFAULT_BACKEND = "https://sakusen.space"
+
 
 def _backend_env() -> str | None:
     """Read backend URL from SAKUSEN_BACKEND, falling back to legacy OGAME_BACKEND."""
@@ -241,9 +246,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    remote = args.remote or (None if args.solo else _backend_env())
+    # Resolution order: --remote, then SAKUSEN_BACKEND env, then the public
+    # default. --solo overrides everything to spin up a local sqlite backend.
+    remote = args.remote or (None if args.solo else (_backend_env() or DEFAULT_BACKEND))
 
-    if args.solo or not remote:
+    if args.solo:
         data_dir = Path(args.data_dir).expanduser()
         port = _find_free_port()
         print(

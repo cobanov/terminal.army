@@ -30,16 +30,16 @@
   {# Single column of cards, centered. #}
 
   <div class="card">
-    <h2 class="card-title">Install <small>one terminal, one command</small></h2>
-    <p class="hint" style="margin-bottom:0.6rem;">Install the sakusen CLI:</p>
+    <h2 class="card-title">Install <small>one terminal, two commands</small></h2>
+    <p class="hint" style="margin-bottom:0.6rem;">1. Install the sakusen CLI:</p>
     <pre class="key">uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"</pre>
-    <p class="hint" style="margin:1rem 0 0.6rem 0;">Point at a server and run:</p>
-    <pre class="key">export SAKUSEN_BACKEND="{% if primary_shard_url %}{{ primary_shard_url }}{% else %}https://s1.sakusen.space{% endif %}"
-sakusen</pre>
+    <p class="hint" style="margin:1rem 0 0.6rem 0;">2. Start playing:</p>
+    <pre class="key">sakusen</pre>
     <p class="hint" style="margin-top:1rem;">
-      Need <code>uv</code>? <code>curl -LsSf https://astral.sh/uv/install.sh | sh</code>.
-      On first launch the CLI opens a browser URL — sign in there, the TUI takes
-      over once you're authenticated.
+      No config needed — the CLI defaults to <code>sakusen.space</code>. On first
+      launch it opens a browser URL, sign in there, the TUI takes over once
+      you're authenticated. Need <code>uv</code>?
+      <code>curl -LsSf https://astral.sh/uv/install.sh | sh</code>.
     </p>
   </div>
 
