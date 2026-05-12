@@ -529,10 +529,26 @@ def _progress_fraction(started_iso: str, finished_iso: str) -> float:
     return elapsed / total
 
 
+_PROGRESS_EIGHTHS = "▏▎▍▌▋▊▉█"
+
+
 def _progress_bar(frac: float, width: int = 10) -> tuple[str, str]:
-    """Return (filled, empty) two-char strings ready for styled append."""
-    filled = max(0, min(width, round(frac * width)))
-    return "█" * filled, "░" * (width - filled)
+    """Return (filled, empty) strings for a 1/8-precision progress bar.
+
+    Sub-cell precision lets the bar advance smoothly between ticks
+    instead of jumping a whole cell at a time — looks closer to a
+    modern terminal progress widget.
+    """
+    frac = max(0.0, min(1.0, frac))
+    total_eighths = round(frac * width * 8)
+    full = total_eighths // 8
+    rem = total_eighths % 8
+    filled = "█" * full
+    if rem:
+        filled += _PROGRESS_EIGHTHS[rem - 1]
+    used = full + (1 if rem else 0)
+    empty = "─" * (width - used)
+    return filled, empty
 
 
 # ---------- ASCII planet globe -------------------------------------------
@@ -579,10 +595,10 @@ def _planet_signature(seed: str) -> dict:
         "weights": [rng.uniform(0.5, 1.1) for _ in range(5)],
         # Threshold controls landmass share: 0.0 → mostly land, 0.8 → ocean planet.
         "land_threshold": rng.uniform(0.0, 0.6),
-        # Light direction varies per planet so they don't all face the
-        # same way — but stays close to head-on so most of the disk stays
-        # lit. ±0.4 rad → about 75% of the sphere visible.
-        "light_angle": rng.uniform(-0.4, 0.4),
+        # Light direction varies per planet but stays small so the
+        # terminator only carves a soft crescent — the full disk is
+        # always visible. ±0.25 rad ≈ ±14°.
+        "light_angle": rng.uniform(-0.25, 0.25),
         # Polar caps when cold planets are well-rendered with a brighter
         # band at high latitude. Larger value → more cap.
         "ice_cap": rng.uniform(0.55, 0.85),
@@ -622,11 +638,11 @@ def _render_planet_globe(seed: str, position: int) -> Text:
                 text.append(" ")
                 continue
             nz = math.sqrt(1 - r2)
-            # Lambert diffuse. Light Y = 0 so it drops out of the dot product.
-            d = max(0.0, nx * lx + nz * lz)
-            if d < 0.05:
-                text.append(" ")
-                continue
+            # Lambert diffuse + small ambient floor so the night side
+            # still shows the planet's silhouette as a faint band instead
+            # of disappearing into the background.
+            ambient = 0.15
+            d = max(ambient, nx * lx + nz * lz)
             lat = math.asin(max(-1.0, min(1.0, ny)))
             lon = math.atan2(nx, nz)
             # Polar ice on cold planets — always lit-bright, ignores the
@@ -1292,11 +1308,13 @@ class ReplScreen(Screen):
                 body.append(f"  #{q['id']} ", style="dim")
                 body.append(f"{q['item_key']}\n", style="green")
                 frac = _progress_fraction(q["started_at"], q["finished_at"])
-                filled, empty = _progress_bar(frac, width=10)
+                filled, empty = _progress_bar(frac, width=12)
+                pct = int(round(frac * 100))
                 body.append("    ")
                 body.append(filled, style="green")
                 body.append(empty, style="dim")
-                body.append(f"  {remaining}\n", style="green")
+                body.append(f"  {pct:>3}%  ", style="dim")
+                body.append(f"{remaining}\n", style="green")
 
         # === 3) MISSIONS — active fleet operations ===
         body.append(
