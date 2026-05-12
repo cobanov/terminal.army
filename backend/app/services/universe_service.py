@@ -159,9 +159,7 @@ async def backfill_user_researches(db: AsyncSession) -> int:
     user_ids = list(res.scalars().all())
     added = 0
     for uid in user_ids:
-        existing_res = await db.execute(
-            select(Research.tech_type).where(Research.user_id == uid)
-        )
+        existing_res = await db.execute(select(Research.tech_type).where(Research.user_id == uid))
         existing = set(existing_res.scalars().all())
         for tt in TechType:
             if tt.value not in existing:

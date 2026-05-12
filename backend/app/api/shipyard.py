@@ -13,13 +13,12 @@ from backend.app.game.constants import (
     SHIP_STATS,
     BuildingType,
     ShipType,
-    TechType,
 )
 from backend.app.game.formulas import build_time_seconds
 from backend.app.models.building import Building
 from backend.app.models.planet import Planet
 from backend.app.models.research import Research
-from backend.app.models.ship import PlanetDefense, PlanetShip
+from backend.app.models.ship import PlanetShip
 from backend.app.models.universe import Universe
 from backend.app.services.shipyard_service import queue_ship_build
 
@@ -61,9 +60,7 @@ async def list_ships(planet_id: int, user: CurrentUser, db: DBSession) -> ShipsR
     tech_res = await db.execute(select(Research).where(Research.user_id == user.id))
     techs = {r.tech_type: r.level for r in tech_res.scalars().all()}
 
-    stock_res = await db.execute(
-        select(PlanetShip).where(PlanetShip.planet_id == planet_id)
-    )
+    stock_res = await db.execute(select(PlanetShip).where(PlanetShip.planet_id == planet_id))
     stock = {r.ship_type: r.count for r in stock_res.scalars().all()}
 
     rows: list[ShipRow] = []
@@ -79,15 +76,19 @@ async def list_ships(planet_id: int, user: CurrentUser, db: DBSession) -> ShipsR
             else:
                 if techs.get(k, 0) < v:
                     missing.append(f"{k} L{v}")
-        rows.append(ShipRow(
-            ship_type=st.value,
-            label=SHIP_LABELS[st],
-            count=stock.get(st.value, 0),
-            cost_metal=m, cost_crystal=c, cost_deuterium=d,
-            build_seconds=per_ship_seconds,
-            prereq_met=len(missing) == 0,
-            prereq_missing=missing,
-        ))
+        rows.append(
+            ShipRow(
+                ship_type=st.value,
+                label=SHIP_LABELS[st],
+                count=stock.get(st.value, 0),
+                cost_metal=m,
+                cost_crystal=c,
+                cost_deuterium=d,
+                build_seconds=per_ship_seconds,
+                prereq_met=len(missing) == 0,
+                prereq_missing=missing,
+            )
+        )
 
     return ShipsResponse(planet_id=planet_id, shipyard_level=shipyard_lvl, ships=rows)
 

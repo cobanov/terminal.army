@@ -37,16 +37,15 @@ class LeaderboardResponse(BaseModel):
 
 
 @router.get("/leaderboard", response_model=LeaderboardResponse)
-async def get_leaderboard(
-    user: CurrentUser, db: DBSession, limit: int = 50
-) -> LeaderboardResponse:
+async def get_leaderboard(user: CurrentUser, db: DBSession, limit: int = 50) -> LeaderboardResponse:
     users_res = await db.execute(select(User).order_by(User.id))
     users = list(users_res.scalars().all())
 
     # Pre-load alliance membership for tag display
     member_res = await db.execute(
-        select(AllianceMember.user_id, Alliance.tag)
-        .join(Alliance, Alliance.id == AllianceMember.alliance_id)
+        select(AllianceMember.user_id, Alliance.tag).join(
+            Alliance, Alliance.id == AllianceMember.alliance_id
+        )
     )
     alliance_by_user: dict[int, str] = {uid: tag for uid, tag in member_res.all()}
 
@@ -66,11 +65,15 @@ async def get_leaderboard(
             my_rank = i
             my_total = pts["total_points"]
         if i <= limit:
-            rows.append(LeaderboardRow(
-                rank=i, user_id=u.id, username=u.username,
-                alliance_tag=alliance_by_user.get(u.id),
-                **pts,
-            ))
+            rows.append(
+                LeaderboardRow(
+                    rank=i,
+                    user_id=u.id,
+                    username=u.username,
+                    alliance_tag=alliance_by_user.get(u.id),
+                    **pts,
+                )
+            )
 
     return LeaderboardResponse(
         total_players=len(scored),

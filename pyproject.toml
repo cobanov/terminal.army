@@ -29,6 +29,7 @@ dependencies = [
     "apscheduler>=3.10.4",
     "python-multipart>=0.0.9",
     "jinja2>=3.1.0",
+    "slowapi>=0.1.9",
     "textual>=0.60.0",
     "rich>=13.7.0",
 ]
@@ -79,7 +80,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "RUF"]
-ignore = ["E501"]
+# E501: line length (handled by formatter)
+# RUF003: Turkish characters in comments (project is Turkish-language)
+# RUF012: mutable class attrs (Textual classes use them by convention)
+# RUF059: unused unpacked names (helpful pattern: m,c,d = COSTS[...])
+ignore = ["E501", "RUF003", "RUF012", "RUF059"]
 
 [tool.mypy]
 python_version = "3.12"

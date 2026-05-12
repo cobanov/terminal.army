@@ -82,9 +82,7 @@ async def upgrade_building(
 
 
 @router.get("/planets/{planet_id}/queue", response_model=list[QueueItemRead])
-async def get_queue(
-    planet_id: int, user: CurrentUser, db: DBSession
-) -> list[QueueItemRead]:
+async def get_queue(planet_id: int, user: CurrentUser, db: DBSession) -> list[QueueItemRead]:
     planet = await db.get(Planet, planet_id)
     if planet is None or planet.owner_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="planet not found")

@@ -37,9 +37,7 @@ async def get_planet_buildings(db: AsyncSession, planet_id: int) -> dict[Buildin
     return out
 
 
-async def compute_production_for_planet(
-    db: AsyncSession, planet: Planet
-) -> ProductionReport:
+async def compute_production_for_planet(db: AsyncSession, planet: Planet) -> ProductionReport:
     buildings = await get_planet_buildings(db, planet.id)
     researches = await get_user_researches(db, planet.owner_user_id)
 
@@ -72,9 +70,7 @@ async def refresh_planet_resources(
     # planet from both computing + applying the same delta_seconds. On
     # SQLite (solo mode) this is a no-op; on Postgres it serializes the
     # row update.
-    result = await db.execute(
-        select(Planet).where(Planet.id == planet_id).with_for_update()
-    )
+    result = await db.execute(select(Planet).where(Planet.id == planet_id).with_for_update())
     planet = result.scalar_one_or_none()
     if planet is None:
         raise ValueError(f"planet {planet_id} not found")

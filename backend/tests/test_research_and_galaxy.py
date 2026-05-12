@@ -13,9 +13,9 @@ from backend.app.scheduler import run_tick_once
 async def _register(client, name: str) -> tuple[str, int]:
     await client.post(
         "/auth/register",
-        json={"username": name, "email": f"{name}@example.com", "password": "secret1"},
+        json={"username": name, "email": f"{name}@example.com", "password": "secret1pass"},
     )
-    r = await client.post("/auth/login", data={"username": name, "password": "secret1"})
+    r = await client.post("/auth/login", data={"username": name, "password": "secret1pass"})
     token = r.json()["access_token"]
     r = await client.get("/planets", headers={"Authorization": f"Bearer {token}"})
     return token, r.json()[0]["id"]
@@ -45,6 +45,7 @@ async def test_research_flow_with_lab(client) -> None:
         lab.level = 1
 
         from backend.app.models.planet import Planet
+
         planet = await db.get(Planet, planet_id)
         planet.resources_metal = 10000
         planet.resources_crystal = 10000
@@ -72,9 +73,7 @@ async def test_research_flow_with_lab(client) -> None:
 
 async def test_galaxy_view(client) -> None:
     token, planet_id = await _register(client, "gal1")
-    r = await client.get(
-        f"/planets/{planet_id}", headers={"Authorization": f"Bearer {token}"}
-    )
+    r = await client.get(f"/planets/{planet_id}", headers={"Authorization": f"Bearer {token}"})
     p = r.json()
 
     r = await client.get(

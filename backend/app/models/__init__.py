@@ -14,17 +14,29 @@ from backend.app.models.universe import Universe
 from backend.app.models.user import User
 
 all_models = (
-    User, Universe, Planet, Building, Research, BuildQueue,
-    Message, DeviceSession, PlanetShip, PlanetDefense,
-    Fleet, FleetShip, Report, Alliance, AllianceMember,
+    User,
+    Universe,
+    Planet,
+    Building,
+    Research,
+    BuildQueue,
+    Message,
+    DeviceSession,
+    PlanetShip,
+    PlanetDefense,
+    Fleet,
+    FleetShip,
+    Report,
+    Alliance,
+    AllianceMember,
 )
 
 __all__ = [
     "Alliance",
     "AllianceMember",
     "AllianceRole",
-    "Building",
     "BuildQueue",
+    "Building",
     "DeviceSession",
     "Fleet",
     "FleetMission",

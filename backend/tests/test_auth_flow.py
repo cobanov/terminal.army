@@ -4,7 +4,7 @@ from __future__ import annotations
 async def test_register_login_me_flow(client) -> None:
     r = await client.post(
         "/auth/register",
-        json={"username": "alice", "email": "alice@example.com", "password": "secret1"},
+        json={"username": "alice", "email": "alice@example.com", "password": "secret1pass"},
     )
     assert r.status_code == 201, r.text
     body = r.json()
@@ -13,7 +13,7 @@ async def test_register_login_me_flow(client) -> None:
 
     r = await client.post(
         "/auth/login",
-        data={"username": "alice", "password": "secret1"},
+        data={"username": "alice", "password": "secret1pass"},
         headers={"content-type": "application/x-www-form-urlencoded"},
     )
     assert r.status_code == 200, r.text
@@ -27,11 +27,11 @@ async def test_register_login_me_flow(client) -> None:
 async def test_register_duplicate_username(client) -> None:
     await client.post(
         "/auth/register",
-        json={"username": "bob", "email": "bob@example.com", "password": "secret1"},
+        json={"username": "bob", "email": "bob@example.com", "password": "secret1pass"},
     )
     r = await client.post(
         "/auth/register",
-        json={"username": "bob", "email": "bob2@example.com", "password": "secret1"},
+        json={"username": "bob", "email": "bob2@example.com", "password": "secret1pass"},
     )
     assert r.status_code == 409
 
@@ -39,13 +39,13 @@ async def test_register_duplicate_username(client) -> None:
 async def test_register_gets_one_planet(client) -> None:
     r = await client.post(
         "/auth/register",
-        json={"username": "carol", "email": "carol@example.com", "password": "secret1"},
+        json={"username": "carol", "email": "carol@example.com", "password": "secret1pass"},
     )
     assert r.status_code == 201
 
     r = await client.post(
         "/auth/login",
-        data={"username": "carol", "password": "secret1"},
+        data={"username": "carol", "password": "secret1pass"},
     )
     token = r.json()["access_token"]
 

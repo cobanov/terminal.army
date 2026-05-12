@@ -5,16 +5,11 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.game.constants import (
-    BUILDING_LABELS,
-    DEFENSE_LABELS,
-    SHIP_LABELS,
-    SHIP_STATS,
-    BuildingType,
     DefenseType,
     ShipType,
     TechType,
@@ -106,6 +101,12 @@ async def send_fleet(
     if not ships or all(c <= 0 for c in ships.values()):
         raise HTTPException(status_code=400, detail="select at least one ship")
 
+    # Defense-in-depth: schema also enforces ge=0 on cargo_*, but if an
+    # internal caller skips the schema, a negative cargo would inflate the
+    # planet on the spend step (resources -= cargo).
+    if cargo_metal < 0 or cargo_crystal < 0 or cargo_deuterium < 0:
+        raise HTTPException(status_code=400, detail="cargo values must be >= 0")
+
     planet = await db.get(Planet, origin_planet_id)
     if planet is None or planet.owner_user_id != user_id:
         raise HTTPException(status_code=404, detail="planet not found")
@@ -116,11 +117,12 @@ async def send_fleet(
     await refresh_planet_resources(db, origin_planet_id)
     await db.refresh(planet)
 
-    # Lock ship rows so two concurrent send-fleet calls can't both pass the
-    # stock check and double-spend the same units.
+    # Lock ship rows AND the planet row so two concurrent send-fleet calls
+    # can't both pass the stock + resource checks and double-spend.
     await db.execute(
         select(PlanetShip).where(PlanetShip.planet_id == origin_planet_id).with_for_update()
     )
+    await db.execute(select(Planet).where(Planet.id == origin_planet_id).with_for_update())
 
     # Verify ship stock
     stock = await _get_planet_ships(db, origin_planet_id)
@@ -161,8 +163,12 @@ async def send_fleet(
     # Distance + duration + fuel
     techs = await _user_techs(db, user_id)
     dist = distance(
-        planet.galaxy, planet.system, planet.position,
-        target_galaxy, target_system, target_position,
+        planet.galaxy,
+        planet.system,
+        planet.position,
+        target_galaxy,
+        target_system,
+        target_position,
     )
     speed = slowest_ship_speed(ships, techs)
     universe = await db.get(Universe, planet.universe_id)
@@ -202,14 +208,14 @@ async def send_fleet(
     for st, c in ships.items():
         if c <= 0:
             continue
-        row = await db.execute(
+        ship_res = await db.execute(
             select(PlanetShip).where(
                 PlanetShip.planet_id == origin_planet_id,
                 PlanetShip.ship_type == st.value,
             )
         )
-        row = row.scalar_one()
-        row.count -= c
+        ship_row = ship_res.scalar_one()
+        ship_row.count -= c
 
     planet.resources_metal = float(planet.resources_metal) - cargo_metal
     planet.resources_crystal = float(planet.resources_crystal) - cargo_crystal
@@ -252,6 +258,7 @@ async def send_fleet(
 
 
 # ---------- Scheduler: arrivals + returns + combat ------------------------
+
 
 async def process_fleet_arrivals(db: AsyncSession, now: datetime | None = None) -> int:
     """Find outbound fleets whose arrival_at has passed and process them."""
@@ -377,6 +384,7 @@ async def _process_return(db: AsyncSession, fleet: Fleet) -> None:
 
 # ---------- Mission handlers ---------------------------------------------
 
+
 async def _do_transport(db: AsyncSession, fleet: Fleet) -> None:
     """Drop cargo at target, ships return empty."""
     target = await db.get(Planet, fleet.target_planet_id) if fleet.target_planet_id else None
@@ -469,6 +477,7 @@ async def _do_espionage(db: AsyncSession, fleet: Fleet) -> None:
 
     # Possibly destroy some probes (counter-esp)
     import random
+
     destroyed_probes = 0
     for _ in range(probes):
         if random.random() < counter_chance:
@@ -506,9 +515,7 @@ async def _do_espionage(db: AsyncSession, fleet: Fleet) -> None:
 
     # Level 4+: buildings
     if info_level >= 4:
-        bld_res = await db.execute(
-            select(Building).where(Building.planet_id == target.id)
-        )
+        bld_res = await db.execute(select(Building).where(Building.planet_id == target.id))
         body["buildings"] = {b.building_type: b.level for b in bld_res.scalars().all()}
 
     # Level 5: research
@@ -531,13 +538,16 @@ async def _do_espionage(db: AsyncSession, fleet: Fleet) -> None:
         owner_id=target_owner.id,
         report_type=ReportType.ESPIONAGE.value,
         title=f"Spied on by {attacker.username} from {fleet.target_galaxy}:{fleet.target_system}:{fleet.target_position}",
-        body=json.dumps({
-            "info_level": 1,
-            "spy_username": attacker.username,
-            "probes_sent": probes,
-            "probes_destroyed": destroyed_probes,
-            "counter_chance": round(counter_chance, 2),
-        }, ensure_ascii=False),
+        body=json.dumps(
+            {
+                "info_level": 1,
+                "spy_username": attacker.username,
+                "probes_sent": probes,
+                "probes_destroyed": destroyed_probes,
+                "counter_chance": round(counter_chance, 2),
+            },
+            ensure_ascii=False,
+        ),
         target_galaxy=target.galaxy,
         target_system=target.system,
         target_position=target.position,
@@ -589,7 +599,9 @@ async def _do_attack(db: AsyncSession, fleet: Fleet) -> None:
 
     # Update DB counts
     # Attacker fleet remaining
-    for fs in (await db.execute(select(FleetShip).where(FleetShip.fleet_id == fleet.id))).scalars().all():
+    for fs in (
+        (await db.execute(select(FleetShip).where(FleetShip.fleet_id == fleet.id))).scalars().all()
+    ):
         new_count = result.attacker_remaining.get(fs.ship_type, fs.count)
         fs.count = max(0, new_count)
     total_atk_remaining = sum(result.attacker_remaining.values())
@@ -597,11 +609,19 @@ async def _do_attack(db: AsyncSession, fleet: Fleet) -> None:
         fleet.status = FleetStatus.DESTROYED.value
 
     # Defender ships
-    for ps in (await db.execute(select(PlanetShip).where(PlanetShip.planet_id == target.id))).scalars().all():
+    for ps in (
+        (await db.execute(select(PlanetShip).where(PlanetShip.planet_id == target.id)))
+        .scalars()
+        .all()
+    ):
         if ps.ship_type in result.defender_ships_remaining:
             ps.count = max(0, result.defender_ships_remaining[ps.ship_type])
     # Defender defenses
-    for pd in (await db.execute(select(PlanetDefense).where(PlanetDefense.planet_id == target.id))).scalars().all():
+    for pd in (
+        (await db.execute(select(PlanetDefense).where(PlanetDefense.planet_id == target.id)))
+        .scalars()
+        .all()
+    ):
         if pd.defense_type in result.defender_defenses_remaining:
             pd.count = max(0, result.defender_defenses_remaining[pd.defense_type])
 
@@ -610,9 +630,9 @@ async def _do_attack(db: AsyncSession, fleet: Fleet) -> None:
     if result.winner == "attacker" and fleet.status != FleetStatus.DESTROYED.value:
         await refresh_planet_resources(db, target.id)
         await db.refresh(target)
-        plunder_cap = fleet_cargo_capacity({
-            ShipType(st): c for st, c in result.attacker_remaining.items() if c > 0
-        }) - (fleet.cargo_metal + fleet.cargo_crystal + fleet.cargo_deuterium)
+        plunder_cap = fleet_cargo_capacity(
+            {ShipType(st): c for st, c in result.attacker_remaining.items() if c > 0}
+        ) - (fleet.cargo_metal + fleet.cargo_crystal + fleet.cargo_deuterium)
         plunder_cap = max(0, plunder_cap)
         max_share = 0.5
         m_plund = min(int(target.resources_metal * max_share), plunder_cap // 3)

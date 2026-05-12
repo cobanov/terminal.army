@@ -43,13 +43,14 @@ from backend.app.models.planet import Planet
 from backend.app.models.research import Research
 from backend.app.models.ship import PlanetDefense, PlanetShip
 from backend.app.models.user import User
+from backend.app.services.resource_service import refresh_planet_resources
 from backend.app.services.universe_service import get_default_universe
 from backend.app.web_templates import templates
 
 router = APIRouter(tags=["admin-ui"])
 
 
-async def _require_admin_or_redirect(token: str | None, db: AsyncSession):
+async def _require_admin_or_redirect(token: str | None, db: AsyncSession) -> User | Response:
     settings = get_settings()
     admin = (settings.admin_username or "").strip()
     if not admin:
@@ -65,11 +66,12 @@ async def _require_admin_or_redirect(token: str | None, db: AsyncSession):
 def _forbidden(your_user: str, admin: str) -> HTMLResponse:
     # Render the forbidden template inline (no request object needed since
     # we're not setting any cookies here).
-    from fastapi import Request as _Req
     # Minimal request-like dict for template
     return HTMLResponse(
         templates.get_template("admin/forbidden.html").render(
-            request=None, your_user=your_user, admin=admin,
+            request=None,
+            your_user=your_user,
+            admin=admin,
         ),
         status_code=403,
     )
@@ -94,18 +96,24 @@ async def admin_dashboard(
     user_rows = []
     for u in users:
         planet_res = await db.execute(
-            select(func.count()).select_from(Planet)
-            .where(Planet.owner_user_id == u.id)
+            select(func.count()).select_from(Planet).where(Planet.owner_user_id == u.id)
         )
         planet_count = int(planet_res.scalar() or 0)
-        user_rows.append({
-            "id": u.id, "username": u.username, "email": u.email,
-            "planet_count": planet_count,
-        })
+        user_rows.append(
+            {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "planet_count": planet_count,
+            }
+        )
 
     universe = await get_default_universe(db)
 
-    return templates.TemplateResponse(name="admin/index.html", request=request, context={
+    return templates.TemplateResponse(
+        name="admin/index.html",
+        request=request,
+        context={
             "request": request,
             "admin_user": admin_user,
             "users": user_rows,
@@ -125,6 +133,15 @@ async def admin_set_speed_form(
         return auth
     universe = await get_default_universe(db)
     if universe is not None:
+        # Refresh every planet at the OLD speed before flipping; otherwise
+        # lag windows would retroactively apply the new rate.
+        planet_ids = list(
+            (await db.execute(select(Planet.id).where(Planet.universe_id == universe.id)))
+            .scalars()
+            .all()
+        )
+        for pid in planet_ids:
+            await refresh_planet_resources(db, pid)
         universe.speed_economy = speed
         universe.speed_fleet = speed
         universe.speed_research = speed
@@ -162,7 +179,10 @@ async def admin_user_edit(
     )
     planets = list(planet_res.scalars().all())
 
-    return templates.TemplateResponse(name="admin/user.html", request=request, context={
+    return templates.TemplateResponse(
+        name="admin/user.html",
+        request=request,
+        context={
             "request": request,
             "target": target,
             "tech_fields": tech_fields,
@@ -188,13 +208,11 @@ async def admin_save_researches(
         if key not in form:
             continue
         try:
-            new_level = max(0, int(form[key]))
+            new_level = max(0, int(str(form[key])))
         except ValueError:
             continue
         res = await db.execute(
-            select(Research).where(
-                Research.user_id == user_id, Research.tech_type == tt.value
-            )
+            select(Research).where(Research.user_id == user_id, Research.tech_type == tt.value)
         )
         row = res.scalar_one_or_none()
         if row is None:
@@ -238,10 +256,17 @@ async def admin_create_planet(
     planet = Planet(
         owner_user_id=user_id,
         universe_id=target.current_universe_id,
-        galaxy=galaxy, system=system, position=position, name=name,
-        fields_used=0, fields_total=attrs.fields_total,
-        temp_min=attrs.temp_min, temp_max=attrs.temp_max,
-        resources_metal=500.0, resources_crystal=500.0, resources_deuterium=0.0,
+        galaxy=galaxy,
+        system=system,
+        position=position,
+        name=name,
+        fields_used=0,
+        fields_total=attrs.fields_total,
+        temp_min=attrs.temp_min,
+        temp_max=attrs.temp_max,
+        resources_metal=500.0,
+        resources_crystal=500.0,
+        resources_deuterium=0.0,
         resources_last_updated_at=datetime.now(UTC),
     )
     db.add(planet)
@@ -279,25 +304,24 @@ async def admin_planet_edit(
         for bt in BuildingType
     ]
 
-    ship_res = await db.execute(
-        select(PlanetShip).where(PlanetShip.planet_id == planet_id)
-    )
+    ship_res = await db.execute(select(PlanetShip).where(PlanetShip.planet_id == planet_id))
     ship_map = {s.ship_type: s.count for s in ship_res.scalars().all()}
     ship_fields = [
         {"key": st.value, "label": SHIP_LABELS[st], "count": ship_map.get(st.value, 0)}
         for st in ShipType
     ]
 
-    def_res = await db.execute(
-        select(PlanetDefense).where(PlanetDefense.planet_id == planet_id)
-    )
+    def_res = await db.execute(select(PlanetDefense).where(PlanetDefense.planet_id == planet_id))
     def_map = {d.defense_type: d.count for d in def_res.scalars().all()}
     defense_fields = [
         {"key": dt.value, "label": DEFENSE_LABELS[dt], "count": def_map.get(dt.value, 0)}
         for dt in DefenseType
     ]
 
-    return templates.TemplateResponse(name="admin/planet.html", request=request, context={
+    return templates.TemplateResponse(
+        name="admin/planet.html",
+        request=request,
+        context={
             "request": request,
             "planet": planet,
             "target": target,
@@ -325,18 +349,22 @@ async def admin_save_planet(
         return HTMLResponse("planet not found", status_code=404)
 
     form = await request.form()
-    if (name := form.get("name")):
+    if name := form.get("name"):
         planet.name = str(name)[:32]
     for fld in ("fields_used", "fields_total", "temp_min", "temp_max"):
         if fld in form:
             try:
-                setattr(planet, fld, int(form[fld]))
+                setattr(planet, fld, int(str(form[fld])))
             except ValueError:
                 pass
-    for src, dst in (("metal", "resources_metal"), ("crystal", "resources_crystal"), ("deuterium", "resources_deuterium")):
+    for src, dst in (
+        ("metal", "resources_metal"),
+        ("crystal", "resources_crystal"),
+        ("deuterium", "resources_deuterium"),
+    ):
         if src in form:
             try:
-                setattr(planet, dst, float(max(0, int(form[src]))))
+                setattr(planet, dst, float(max(0, int(str(form[src])))))
             except ValueError:
                 pass
     planet.resources_last_updated_at = datetime.now(UTC)
@@ -346,60 +374,60 @@ async def admin_save_planet(
         if key not in form:
             continue
         try:
-            lvl = max(0, int(form[key]))
+            lvl = max(0, int(str(form[key])))
         except ValueError:
             continue
-        row_res = await db.execute(
+        bld_res = await db.execute(
             select(Building).where(
                 Building.planet_id == planet_id, Building.building_type == bt.value
             )
         )
-        row = row_res.scalar_one_or_none()
-        if row is None:
+        bld_row = bld_res.scalar_one_or_none()
+        if bld_row is None:
             db.add(Building(planet_id=planet_id, building_type=bt.value, level=lvl))
         else:
-            row.level = lvl
+            bld_row.level = lvl
 
     for st in ShipType:
         key = f"ship_{st.value}"
         if key not in form:
             continue
         try:
-            cnt = max(0, int(form[key]))
+            cnt = max(0, int(str(form[key])))
         except ValueError:
             continue
-        row_res = await db.execute(
+        ship_res = await db.execute(
             select(PlanetShip).where(
                 PlanetShip.planet_id == planet_id, PlanetShip.ship_type == st.value
             )
         )
-        row = row_res.scalar_one_or_none()
-        if row is None:
+        ship_row = ship_res.scalar_one_or_none()
+        if ship_row is None:
             if cnt > 0:
                 db.add(PlanetShip(planet_id=planet_id, ship_type=st.value, count=cnt))
         else:
-            row.count = cnt
+            ship_row.count = cnt
 
     for dt in DefenseType:
         key = f"def_{dt.value}"
         if key not in form:
             continue
         try:
-            cnt = max(0, int(form[key]))
+            cnt = max(0, int(str(form[key])))
         except ValueError:
             continue
-        row_res = await db.execute(
+        def_res = await db.execute(
             select(PlanetDefense).where(
                 PlanetDefense.planet_id == planet_id,
                 PlanetDefense.defense_type == dt.value,
             )
         )
-        row = row_res.scalar_one_or_none()
-        if row is None:
+        def_row = def_res.scalar_one_or_none()
+        if def_row is None:
             if cnt > 0:
                 db.add(PlanetDefense(planet_id=planet_id, defense_type=dt.value, count=cnt))
         else:
-            row.count = cnt
+            def_row.count = cnt
 
     await db.commit()
     return RedirectResponse(f"/admin/user/{user_id}/planet/{planet_id}", status_code=303)

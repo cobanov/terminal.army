@@ -55,9 +55,7 @@ def compute_planet_production(
 
     # Gross production (no energy throttling yet)
     base_m, base_c, base_d = base_passive_production(speed)
-    gross_metal = base_m + metal_mine_production(
-        metal_lvl, speed, plasma, metal_position_bonus
-    )
+    gross_metal = base_m + metal_mine_production(metal_lvl, speed, plasma, metal_position_bonus)
     gross_crystal = base_c + crystal_mine_production(
         crystal_lvl, speed, plasma, crystal_position_bonus
     )

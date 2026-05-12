@@ -28,6 +28,6 @@ class User(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    universe: Mapped["Universe | None"] = relationship(foreign_keys=[current_universe_id])
-    planets: Mapped[list["Planet"]] = relationship(back_populates="owner")
-    researches: Mapped[list["Research"]] = relationship(back_populates="user")
+    universe: Mapped[Universe | None] = relationship(foreign_keys=[current_universe_id])
+    planets: Mapped[list[Planet]] = relationship(back_populates="owner")
+    researches: Mapped[list[Research]] = relationship(back_populates="user")

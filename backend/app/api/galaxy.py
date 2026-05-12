@@ -51,6 +51,4 @@ async def view_galaxy(
                 )
             )
 
-    return GalaxyResponse(
-        universe_id=universe_id, galaxy=galaxy, system=system, slots=slots
-    )
+    return GalaxyResponse(universe_id=universe_id, galaxy=galaxy, system=system, slots=slots)

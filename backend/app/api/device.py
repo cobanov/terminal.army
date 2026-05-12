@@ -15,12 +15,14 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.deps import DBSession
 from backend.app.models.device_session import DeviceSession
+from backend.app.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth-device"])
 
@@ -44,7 +46,8 @@ class PollResponse(BaseModel):
 
 
 @router.post("/start", response_model=StartResponse)
-async def device_start(db: DBSession) -> StartResponse:
+@limiter.limit("20/minute")
+async def device_start(request: Request, db: DBSession) -> StartResponse:
     # 22-char URL-safe random code (clean, no path issues)
     code = secrets.token_urlsafe(16)
     now = datetime.now(UTC)
@@ -66,9 +69,7 @@ async def device_start(db: DBSession) -> StartResponse:
 
 @router.post("/poll")
 async def device_poll(body: PollRequest, db: DBSession) -> PollResponse:
-    result = await db.execute(
-        select(DeviceSession).where(DeviceSession.code == body.auth_code)
-    )
+    result = await db.execute(select(DeviceSession).where(DeviceSession.code == body.auth_code))
     session = result.scalar_one_or_none()
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="auth code not found")
@@ -92,7 +93,7 @@ async def device_poll(body: PollRequest, db: DBSession) -> PollResponse:
     return PollResponse(token=token)
 
 
-async def bind_token_to_code(db, *, code: str, token: str, user_id: int) -> bool:
+async def bind_token_to_code(db: AsyncSession, *, code: str, token: str, user_id: int) -> bool:
     """Used internally by signup/signin views to attach a token to a device code.
 
     Returns True if bound, False if code invalid/expired/already-used.

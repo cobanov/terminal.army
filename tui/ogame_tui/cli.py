@@ -28,6 +28,7 @@ def _backend_env() -> str | None:
     """Read backend URL from SAKUSEN_BACKEND, falling back to legacy OGAME_BACKEND."""
     return os.environ.get("SAKUSEN_BACKEND") or os.environ.get("OGAME_BACKEND")
 
+
 ANSI_RESET = "\033[0m"
 ANSI_BOLD = "\033[1m"
 ANSI_DIM = "\033[2m"
@@ -81,11 +82,16 @@ def _spawn_local_backend(port: int, data_dir: Path) -> tuple[subprocess.Popen, P
 
     proc = subprocess.Popen(
         [
-            sys.executable, "-m", "uvicorn",
+            sys.executable,
+            "-m",
+            "uvicorn",
             "backend.app.main:app",
-            "--host", "127.0.0.1",
-            "--port", str(port),
-            "--log-level", "warning",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--log-level",
+            "warning",
         ],
         env=env,
         stdout=log_fp,
@@ -225,7 +231,8 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--remote", "-r",
+        "--remote",
+        "-r",
         default=None,
         help="Backend URL (multiplayer). Overrides $SAKUSEN_BACKEND.",
     )
@@ -285,6 +292,7 @@ def main() -> None:
     token = _get_or_acquire_credentials(backend_url)
 
     from ogame_tui.app import OGameApp
+
     app = OGameApp(base_url=backend_url, token=token)
     try:
         app.run()

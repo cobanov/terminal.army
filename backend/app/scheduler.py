@@ -1,14 +1,22 @@
-"""APScheduler: tamamlanan queue itemlarini periyodik islet."""
+"""APScheduler: periodic background work.
+
+Two jobs:
+- `_tick` every N seconds: apply completed queue items, fleet arrivals, returns.
+- `_gc_device_sessions` hourly: prune expired auth codes so an unbounded
+  attacker cannot grow the table forever.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy import delete
 
 from backend.app.config import get_settings
 from backend.app.db import AsyncSessionLocal
+from backend.app.models.device_session import DeviceSession
 from backend.app.services.fleet_service import (
     process_fleet_arrivals,
     process_fleet_returns,
@@ -29,10 +37,28 @@ async def _tick() -> None:
             if applied + arrivals + returns > 0:
                 logger.info(
                     "scheduler: queue=%d arrivals=%d returns=%d",
-                    applied, arrivals, returns,
+                    applied,
+                    arrivals,
+                    returns,
                 )
     except Exception:
         logger.exception("scheduler tick failed")
+
+
+async def _gc_device_sessions() -> None:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                delete(DeviceSession).where(DeviceSession.expires_at < datetime.now(UTC))
+            )
+            await db.commit()
+            # CursorResult.rowcount exists at runtime; Result generic type
+            # doesn't expose it, but the async delete returns a cursor.
+            n = getattr(result, "rowcount", 0) or 0
+            if n:
+                logger.info("scheduler: pruned %d expired device sessions", n)
+    except Exception:
+        logger.exception("device-session GC failed")
 
 
 def start_scheduler() -> AsyncIOScheduler:
@@ -46,6 +72,13 @@ def start_scheduler() -> AsyncIOScheduler:
         "interval",
         seconds=settings.scheduler_interval_seconds,
         id="process_completed_queue",
+        replace_existing=True,
+    )
+    sched.add_job(
+        _gc_device_sessions,
+        "interval",
+        minutes=15,
+        id="gc_device_sessions",
         replace_existing=True,
     )
     sched.start()
@@ -66,4 +99,4 @@ async def run_tick_once() -> int:
         return await process_completed_queue(db)
 
 
-__all__ = ["asyncio", "run_tick_once", "start_scheduler", "stop_scheduler"]
+__all__ = ["run_tick_once", "start_scheduler", "stop_scheduler"]

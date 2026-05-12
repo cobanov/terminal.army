@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.db import Base
 
 if TYPE_CHECKING:
-    from backend.app.models.user import User
+    pass
 
 
 class AllianceRole(StrEnum):
@@ -38,16 +38,14 @@ class Alliance(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    members: Mapped[list["AllianceMember"]] = relationship(
+    members: Mapped[list[AllianceMember]] = relationship(
         back_populates="alliance", cascade="all, delete-orphan"
     )
 
 
 class AllianceMember(Base):
     __tablename__ = "alliance_members"
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_alliance_member_user"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", name="uq_alliance_member_user"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     alliance_id: Mapped[int] = mapped_column(

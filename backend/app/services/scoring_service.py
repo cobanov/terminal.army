@@ -71,17 +71,13 @@ async def user_points(db: AsyncSession, user_id: int) -> dict[str, int]:
         .join(Planet, Planet.id == Building.planet_id)
         .where(Planet.owner_user_id == user_id)
     )
-    building_points = sum(
-        _cumulative_building_cost(bt, lvl) for bt, lvl in bld_res.all()
-    )
+    building_points = sum(_cumulative_building_cost(bt, lvl) for bt, lvl in bld_res.all())
 
     # Research — per user
     res_res = await db.execute(
         select(Research.tech_type, Research.level).where(Research.user_id == user_id)
     )
-    research_points = sum(
-        _cumulative_research_cost(tt, lvl) for tt, lvl in res_res.all()
-    )
+    research_points = sum(_cumulative_research_cost(tt, lvl) for tt, lvl in res_res.all())
 
     # Fleet — ships across owned planets
     ship_res = await db.execute(

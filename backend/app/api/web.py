@@ -6,10 +6,9 @@ backend/app/templates/. CSS lives in backend/app/static/main.css.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Form, HTTPException, Request, Response, status
+from fastapi import APIRouter, Cookie, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +32,7 @@ from backend.app.models.planet import Planet
 from backend.app.models.queue import BuildQueue
 from backend.app.models.ship import PlanetDefense
 from backend.app.models.user import User
+from backend.app.rate_limit import limiter
 from backend.app.security import create_access_token, decode_token, hash_password, verify_password
 from backend.app.services.resource_service import refresh_planet_resources
 from backend.app.services.scoring_service import user_points
@@ -84,9 +84,7 @@ def _set_auth_cookie(resp: Response, token: str, request: Request | None = None)
 
 
 async def _alliance_for_user(db: AsyncSession, user_id: int) -> Alliance | None:
-    m_res = await db.execute(
-        select(AllianceMember).where(AllianceMember.user_id == user_id)
-    )
+    m_res = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user_id))
     member = m_res.scalar_one_or_none()
     if member is None:
         return None
@@ -111,8 +109,9 @@ async def _landing_rankings(db: AsyncSession, limit: int = 20) -> list[dict]:
     users = list(users_res.scalars().all())
 
     member_res = await db.execute(
-        select(AllianceMember.user_id, Alliance.tag)
-        .join(Alliance, Alliance.id == AllianceMember.alliance_id)
+        select(AllianceMember.user_id, Alliance.tag).join(
+            Alliance, Alliance.id == AllianceMember.alliance_id
+        )
     )
     alliance_by_user: dict[int, str] = {uid: tag for uid, tag in member_res.all()}
 
@@ -154,7 +153,10 @@ async def install_page(
     db: DBSession,
 ) -> Response:
     rankings = await _landing_rankings(db)
-    return templates.TemplateResponse(name="install.html", request=request, context={
+    return templates.TemplateResponse(
+        name="install.html",
+        request=request,
+        context={
             "request": request,
             "rankings": rankings,
         },
@@ -174,7 +176,10 @@ async def login_page(
         user = await _user_from_cookie(ogame_token, db)
         if user is not None:
             return RedirectResponse("/dashboard", status_code=302)
-    return templates.TemplateResponse(name="login.html", request=request, context={"request": request, "code": code, "err": err, "ok": ok},
+    return templates.TemplateResponse(
+        name="login.html",
+        request=request,
+        context={"request": request, "code": code, "err": err, "ok": ok},
     )
 
 
@@ -191,17 +196,21 @@ async def signup_page(
         user = await _user_from_cookie(ogame_token, db)
         if user is not None:
             return RedirectResponse("/dashboard", status_code=302)
-    return templates.TemplateResponse(name="signup.html", request=request, context={"request": request, "code": code, "err": err, "ok": ok},
+    return templates.TemplateResponse(
+        name="signup.html",
+        request=request,
+        context={"request": request, "code": code, "err": err, "ok": ok},
     )
 
 
 @router.post("/signup")
+@limiter.limit("5/minute")
 async def signup_submit(
     request: Request,
     db: DBSession,
     username: Annotated[str, Form(min_length=3, max_length=32)],
     email: Annotated[str, Form()],
-    password: Annotated[str, Form(min_length=6)],
+    password: Annotated[str, Form(min_length=10)],
     code: str | None = None,
 ) -> Response:
     settings = get_settings()
@@ -245,7 +254,10 @@ async def signup_submit(
                 "/login?err=Auth+code+invalid+or+expired.+Restart+sakusen+in+terminal.",
                 status_code=303,
             )
-        return templates.TemplateResponse(name="terminal_success.html", request=request, context={"request": request, "username": username},
+        return templates.TemplateResponse(
+            name="terminal_success.html",
+            request=request,
+            context={"request": request, "username": username},
         )
 
     resp = RedirectResponse("/dashboard", status_code=303)
@@ -254,6 +266,7 @@ async def signup_submit(
 
 
 @router.post("/signin")
+@limiter.limit("10/minute")
 async def signin_submit(
     request: Request,
     db: DBSession,
@@ -265,9 +278,7 @@ async def signin_submit(
     user = result.scalar_one_or_none()
     if user is None or not verify_password(password, user.password_hash):
         qs = f"&code={code}" if code else ""
-        return RedirectResponse(
-            f"/login?err=Wrong+username+or+password{qs}", status_code=303
-        )
+        return RedirectResponse(f"/login?err=Wrong+username+or+password{qs}", status_code=303)
 
     token = create_access_token(user.id)
 
@@ -278,7 +289,10 @@ async def signin_submit(
                 "/login?err=Auth+code+invalid+or+expired.+Restart+sakusen+in+terminal.",
                 status_code=303,
             )
-        return templates.TemplateResponse(name="terminal_success.html", request=request, context={"request": request, "username": user.username},
+        return templates.TemplateResponse(
+            name="terminal_success.html",
+            request=request,
+            context={"request": request, "username": user.username},
         )
 
     resp = RedirectResponse("/dashboard", status_code=303)
@@ -312,7 +326,10 @@ async def me_page(
     planets = list(planet_res.scalars().all())
     alliance = await _alliance_for_user(db, user.id)
 
-    return templates.TemplateResponse(name="me.html", request=request, context={
+    return templates.TemplateResponse(
+        name="me.html",
+        request=request,
+        context={
             "request": request,
             "user": user,
             "planets": planets,
@@ -358,32 +375,26 @@ async def dashboard(
     await db.commit()
     await db.refresh(planet)
 
-    bld_res = await db.execute(
-        select(Building).where(Building.planet_id == planet.id)
-    )
-    levels_by_type: dict[str, int] = {
-        b.building_type: b.level for b in bld_res.scalars().all()
-    }
+    bld_res = await db.execute(select(Building).where(Building.planet_id == planet.id))
+    levels_by_type: dict[str, int] = {b.building_type: b.level for b in bld_res.scalars().all()}
 
     def _bucket(types: tuple[BuildingType, ...]) -> list[dict]:
         rows = []
         for bt in types:
-            rows.append({
-                "key": bt.value,
-                "label": BUILDING_LABELS[bt],
-                "level": levels_by_type.get(bt.value, 0),
-            })
+            rows.append(
+                {
+                    "key": bt.value,
+                    "label": BUILDING_LABELS[bt],
+                    "level": levels_by_type.get(bt.value, 0),
+                }
+            )
         return rows
 
     resources = _bucket(RESOURCE_BUILDINGS)
     facilities = _bucket(FACILITY_BUILDINGS)
 
-    def_res = await db.execute(
-        select(PlanetDefense).where(PlanetDefense.planet_id == planet.id)
-    )
-    def_by_type: dict[str, int] = {
-        d.defense_type: d.count for d in def_res.scalars().all()
-    }
+    def_res = await db.execute(select(PlanetDefense).where(PlanetDefense.planet_id == planet.id))
+    def_by_type: dict[str, int] = {d.defense_type: d.count for d in def_res.scalars().all()}
     defenses = [
         {
             "key": dt.value,
@@ -392,10 +403,8 @@ async def dashboard(
         }
         for dt in DefenseType
     ]
-    defense_total = sum(d["count"] for d in defenses)
-    built_count = sum(
-        1 for r in resources + facilities if r["level"] > 0
-    )
+    defense_total = sum(int(d["count"]) for d in defenses)
+    built_count = sum(1 for r in resources + facilities if r["level"] > 0)
 
     queue_res = await db.execute(
         select(BuildQueue)
@@ -426,7 +435,10 @@ async def dashboard(
     alliance = await _alliance_for_user(db, user.id)
     settings = get_settings()
 
-    return templates.TemplateResponse(name="dashboard.html", request=request, context={
+    return templates.TemplateResponse(
+        name="dashboard.html",
+        request=request,
+        context={
             "request": request,
             "user": user,
             "current_planet": planet,
@@ -466,8 +478,9 @@ async def leaderboard_page(
     users = list(users_res.scalars().all())
 
     member_res = await db.execute(
-        select(AllianceMember.user_id, Alliance.tag)
-        .join(Alliance, Alliance.id == AllianceMember.alliance_id)
+        select(AllianceMember.user_id, Alliance.tag).join(
+            Alliance, Alliance.id == AllianceMember.alliance_id
+        )
     )
     alliance_by_user: dict[int, str] = {uid: tag for uid, tag in member_res.all()}
 
@@ -485,16 +498,21 @@ async def leaderboard_page(
             my_rank = i
             my_points = pts["total_points"]
         if i <= 100:
-            rows.append({
-                "rank": i,
-                "user_id": u.id,
-                "username": u.username,
-                "alliance_tag": alliance_by_user.get(u.id),
-                "is_me": u.id == user.id,
-                **pts,
-            })
+            rows.append(
+                {
+                    "rank": i,
+                    "user_id": u.id,
+                    "username": u.username,
+                    "alliance_tag": alliance_by_user.get(u.id),
+                    "is_me": u.id == user.id,
+                    **pts,
+                }
+            )
 
-    return templates.TemplateResponse(name="leaderboard.html", request=request, context={
+    return templates.TemplateResponse(
+        name="leaderboard.html",
+        request=request,
+        context={
             "request": request,
             "rows": rows,
             "total_players": len(scored),
@@ -529,21 +547,29 @@ async def alliances_page(
     alliances = []
     for a in alliances_raw:
         count_res = await db.execute(
-            select(func.count()).select_from(AllianceMember)
+            select(func.count())
+            .select_from(AllianceMember)
             .where(AllianceMember.alliance_id == a.id)
         )
         member_count = int(count_res.scalar() or 0)
         founder = await db.get(User, a.founder_id)
         is_member = my_alliance is not None and my_alliance.id == a.id
-        alliances.append({
-            "id": a.id, "tag": a.tag, "name": a.name,
-            "description": a.description,
-            "member_count": member_count,
-            "founder_username": founder.username if founder else "?",
-            "is_member": is_member,
-        })
+        alliances.append(
+            {
+                "id": a.id,
+                "tag": a.tag,
+                "name": a.name,
+                "description": a.description,
+                "member_count": member_count,
+                "founder_username": founder.username if founder else "?",
+                "is_member": is_member,
+            }
+        )
 
-    return templates.TemplateResponse(name="alliances.html", request=request, context={
+    return templates.TemplateResponse(
+        name="alliances.html",
+        request=request,
+        context={
             "request": request,
             "user": user,
             "my_alliance": my_alliance,
@@ -567,16 +593,14 @@ async def alliance_create_form(
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
-    existing_m = await db.execute(
-        select(AllianceMember).where(AllianceMember.user_id == user.id)
-    )
+    existing_m = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user.id))
     if existing_m.scalar_one_or_none() is not None:
-        return RedirectResponse(
-            "/alliances?err=Leave+your+current+alliance+first", status_code=303
-        )
+        return RedirectResponse("/alliances?err=Leave+your+current+alliance+first", status_code=303)
 
     a = Alliance(
-        tag=tag.upper(), name=name, description=description,
+        tag=tag.upper(),
+        name=name,
+        description=description,
         founder_id=user.id,
     )
     db.add(a)
@@ -584,12 +608,8 @@ async def alliance_create_form(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        return RedirectResponse(
-            "/alliances?err=Tag+or+name+already+taken", status_code=303
-        )
-    db.add(AllianceMember(
-        alliance_id=a.id, user_id=user.id, role=AllianceRole.FOUNDER.value
-    ))
+        return RedirectResponse("/alliances?err=Tag+or+name+already+taken", status_code=303)
+    db.add(AllianceMember(alliance_id=a.id, user_id=user.id, role=AllianceRole.FOUNDER.value))
     await db.commit()
     return RedirectResponse(f"/alliances/{a.tag}", status_code=303)
 
@@ -623,14 +643,21 @@ async def alliance_detail_page(
     members = []
     for m, u in m_res.all():
         pts = await user_points(db, u.id)
-        members.append({
-            "user_id": u.id, "username": u.username,
-            "role": m.role, "joined_at": m.joined_at,
-            "is_me": u.id == user.id,
-            "total_points": pts["total_points"],
-        })
+        members.append(
+            {
+                "user_id": u.id,
+                "username": u.username,
+                "role": m.role,
+                "joined_at": m.joined_at,
+                "is_me": u.id == user.id,
+                "total_points": pts["total_points"],
+            }
+        )
 
-    return templates.TemplateResponse(name="alliance_detail.html", request=request, context={
+    return templates.TemplateResponse(
+        name="alliance_detail.html",
+        request=request,
+        context={
             "request": request,
             "alliance": a,
             "members": members,
@@ -652,22 +679,16 @@ async def alliance_join_form(
     if user is None:
         return RedirectResponse("/login", status_code=302)
 
-    existing_m = await db.execute(
-        select(AllianceMember).where(AllianceMember.user_id == user.id)
-    )
+    existing_m = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user.id))
     if existing_m.scalar_one_or_none() is not None:
-        return RedirectResponse(
-            "/alliances?err=Leave+your+current+alliance+first", status_code=303
-        )
+        return RedirectResponse("/alliances?err=Leave+your+current+alliance+first", status_code=303)
 
     a_res = await db.execute(select(Alliance).where(Alliance.tag == tag.upper()))
     a = a_res.scalar_one_or_none()
     if a is None:
         return RedirectResponse("/alliances?err=Alliance+not+found", status_code=303)
 
-    db.add(AllianceMember(
-        alliance_id=a.id, user_id=user.id, role=AllianceRole.MEMBER.value
-    ))
+    db.add(AllianceMember(alliance_id=a.id, user_id=user.id, role=AllianceRole.MEMBER.value))
     await db.commit()
     return RedirectResponse(f"/alliances/{a.tag}", status_code=303)
 
@@ -698,8 +719,7 @@ async def alliance_leave_form(
         return RedirectResponse("/alliances?err=Not+a+member", status_code=303)
 
     count_res = await db.execute(
-        select(func.count()).select_from(AllianceMember)
-        .where(AllianceMember.alliance_id == a.id)
+        select(func.count()).select_from(AllianceMember).where(AllianceMember.alliance_id == a.id)
     )
     total_members = int(count_res.scalar() or 0)
     if member.role == AllianceRole.FOUNDER.value and total_members > 1:

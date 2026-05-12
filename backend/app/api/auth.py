@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import or_, select
 
 from backend.app.deps import CurrentUser, DBSession
 from backend.app.models.user import User
+from backend.app.rate_limit import limiter
 from backend.app.schemas.auth import RegisterRequest, TokenResponse, UserPublic
 from backend.app.security import create_access_token, hash_password, verify_password
 from backend.app.services.universe_service import (
@@ -24,7 +25,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=UserPublic,
     status_code=status.HTTP_201_CREATED,
 )
-async def register(body: RegisterRequest, db: DBSession) -> UserPublic:
+@limiter.limit("5/minute")
+async def register(request: Request, body: RegisterRequest, db: DBSession) -> UserPublic:
     existing = await db.execute(
         select(User).where(or_(User.username == body.username, User.email == body.email))
     )
@@ -54,16 +56,16 @@ async def register(body: RegisterRequest, db: DBSession) -> UserPublic:
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def login(
+    request: Request,
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: DBSession,
 ) -> TokenResponse:
     result = await db.execute(select(User).where(User.username == form.username))
     user = result.scalar_one_or_none()
     if user is None or not verify_password(form.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     token = create_access_token(user.id)
     return TokenResponse(access_token=token)
 

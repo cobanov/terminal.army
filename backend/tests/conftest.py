@@ -20,6 +20,12 @@ from backend.app.config import get_settings  # noqa: E402
 
 get_settings.cache_clear()
 
+# Disable rate limiting under pytest. With the in-process slowapi limiter,
+# back-to-back tests share state and hit the 5/minute signup cap.
+from backend.app.rate_limit import limiter  # noqa: E402
+
+limiter.enabled = False
+
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
@@ -37,6 +43,7 @@ async def app():
     # Recreate schema for each test.
     async with engine.begin() as conn:
         from backend.app.db import Base
+
         await conn.run_sync(Base.metadata.drop_all)
     await init_db()
 

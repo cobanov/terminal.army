@@ -116,9 +116,7 @@ async def _apply_research(db: AsyncSession, item: BuildQueue) -> None:
     except ValueError:
         return
     result = await db.execute(
-        select(Research).where(
-            Research.user_id == item.user_id, Research.tech_type == tt.value
-        )
+        select(Research).where(Research.user_id == item.user_id, Research.tech_type == tt.value)
     )
     research = result.scalar_one_or_none()
     if research is None:

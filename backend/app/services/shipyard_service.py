@@ -20,7 +20,6 @@ from backend.app.game.constants import (
     TechType,
 )
 from backend.app.game.formulas import build_time_seconds
-from backend.app.models.building import Building
 from backend.app.models.planet import Planet
 from backend.app.models.queue import BuildQueue, QueueType
 from backend.app.models.research import Research
@@ -94,9 +93,7 @@ async def queue_ship_build(
 
     missing = await _check_ship_prereq(db, planet_id, user_id, ship_type)
     if missing:
-        raise HTTPException(
-            status_code=400, detail=f"prereq not met: {', '.join(missing)}"
-        )
+        raise HTTPException(status_code=400, detail=f"prereq not met: {', '.join(missing)}")
 
     m, c, d, *_ = SHIP_STATS[ship_type]
     tot_m, tot_c, tot_d = m * count, c * count, d * count

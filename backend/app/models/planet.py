@@ -21,9 +21,7 @@ class Planet(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    universe_id: Mapped[int] = mapped_column(
-        ForeignKey("universes.id"), nullable=False, index=True
-    )
+    universe_id: Mapped[int] = mapped_column(ForeignKey("universes.id"), nullable=False, index=True)
 
     galaxy: Mapped[int] = mapped_column(Integer, nullable=False)
     system: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -47,7 +45,7 @@ class Planet(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    owner: Mapped["User"] = relationship(back_populates="planets", foreign_keys=[owner_user_id])
-    buildings: Mapped[list["Building"]] = relationship(
+    owner: Mapped[User] = relationship(back_populates="planets", foreign_keys=[owner_user_id])
+    buildings: Mapped[list[Building]] = relationship(
         back_populates="planet", cascade="all, delete-orphan"
     )

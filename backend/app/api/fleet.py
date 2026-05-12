@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 
@@ -13,6 +12,7 @@ from backend.app.deps import CurrentUser, DBSession
 from backend.app.game.constants import ShipType
 from backend.app.models.fleet import Fleet, FleetMission, FleetShip, FleetStatus
 from backend.app.models.report import Report
+from backend.app.rate_limit import limiter
 from backend.app.services.fleet_service import send_fleet
 
 router = APIRouter(tags=["fleets"])
@@ -25,9 +25,9 @@ class FleetSendRequest(BaseModel):
     target_system: int = Field(ge=1, le=499)
     target_position: int = Field(ge=1, le=15)
     ships: dict[str, int]  # ship_type -> count
-    cargo_metal: int = 0
-    cargo_crystal: int = 0
-    cargo_deuterium: int = 0
+    cargo_metal: int = Field(default=0, ge=0)
+    cargo_crystal: int = Field(default=0, ge=0)
+    cargo_deuterium: int = Field(default=0, ge=0)
     speed_percent: int = Field(default=100, ge=10, le=100)
 
 
@@ -57,21 +57,24 @@ class FleetRead(BaseModel):
 
 
 @router.post("/fleets/send", response_model=FleetRead, status_code=status.HTTP_201_CREATED)
-async def send(body: FleetSendRequest, user: CurrentUser, db: DBSession) -> FleetRead:
+@limiter.limit("30/minute")
+async def send(
+    request: Request, body: FleetSendRequest, user: CurrentUser, db: DBSession
+) -> FleetRead:
     try:
         mission = FleetMission(body.mission)
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=f"unknown mission: {body.mission} (use one of: {[m.value for m in FleetMission]})",
-        )
+        ) from exc
 
     ships: dict[ShipType, int] = {}
     for k, v in body.ships.items():
         try:
             ships[ShipType(k)] = int(v)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"unknown ship type: {k}")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"unknown ship type: {k}") from exc
 
     fleet = await send_fleet(
         db=db,
@@ -90,7 +93,9 @@ async def send(body: FleetSendRequest, user: CurrentUser, db: DBSession) -> Flee
 
     # Load ships
     ships_res = await db.execute(select(FleetShip).where(FleetShip.fleet_id == fleet.id))
-    ship_rows = [FleetShipRead(ship_type=s.ship_type, count=s.count) for s in ships_res.scalars().all()]
+    ship_rows = [
+        FleetShipRead(ship_type=s.ship_type, count=s.count) for s in ships_res.scalars().all()
+    ]
 
     base = FleetRead.model_validate(fleet)
     return FleetRead(**{**base.model_dump(), "ships": ship_rows})
@@ -110,7 +115,9 @@ async def list_fleets(user: CurrentUser, db: DBSession) -> list[FleetRead]:
     out: list[FleetRead] = []
     for f in fleets:
         ships_res = await db.execute(select(FleetShip).where(FleetShip.fleet_id == f.id))
-        ship_rows = [FleetShipRead(ship_type=s.ship_type, count=s.count) for s in ships_res.scalars().all()]
+        ship_rows = [
+            FleetShipRead(ship_type=s.ship_type, count=s.count) for s in ships_res.scalars().all()
+        ]
         base = FleetRead.model_validate(f)
         out.append(FleetRead(**{**base.model_dump(), "ships": ship_rows}))
     return out

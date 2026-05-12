@@ -13,9 +13,9 @@ from backend.app.scheduler import run_tick_once
 async def _register(client, name: str) -> tuple[str, int]:
     await client.post(
         "/auth/register",
-        json={"username": name, "email": f"{name}@example.com", "password": "secret1"},
+        json={"username": name, "email": f"{name}@example.com", "password": "secret1pass"},
     )
-    r = await client.post("/auth/login", data={"username": name, "password": "secret1"})
+    r = await client.post("/auth/login", data={"username": name, "password": "secret1pass"})
     token = r.json()["access_token"]
     r = await client.get("/planets", headers={"Authorization": f"Bearer {token}"})
     return token, r.json()[0]["id"]
@@ -53,6 +53,7 @@ async def test_max_5_queue_then_409(client) -> None:
     # Kaynak hazirla
     async with AsyncSessionLocal() as db:
         from backend.app.models.planet import Planet
+
         p = await db.get(Planet, planet_id)
         p.resources_metal = 100_000
         p.resources_crystal = 100_000
@@ -64,7 +65,7 @@ async def test_max_5_queue_then_409(client) -> None:
             f"/planets/{planet_id}/buildings/metal_mine/upgrade",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert r.status_code == 201, f"queue #{i+1} failed: {r.text}"
+        assert r.status_code == 201, f"queue #{i + 1} failed: {r.text}"
         assert r.json()["target_level"] == i + 1
 
     # 6.ci 409
@@ -77,11 +78,12 @@ async def test_max_5_queue_then_409(client) -> None:
 
 async def test_queue_serial_scheduling(client) -> None:
     """Queue'daki itemler seri (start_at = onceki finished_at)."""
-    from datetime import UTC, datetime
+    from datetime import datetime
 
     token, planet_id = await _register(client, "build_serial")
     async with AsyncSessionLocal() as db:
         from backend.app.models.planet import Planet
+
         p = await db.get(Planet, planet_id)
         p.resources_metal = 100_000
         p.resources_crystal = 100_000
@@ -144,9 +146,7 @@ async def test_cancel_queue_refunds(client) -> None:
     )
     queue_id = r.json()["queue_id"]
 
-    r = await client.delete(
-        f"/queue/{queue_id}", headers={"Authorization": f"Bearer {token}"}
-    )
+    r = await client.delete(f"/queue/{queue_id}", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
 
     async with AsyncSessionLocal() as db:

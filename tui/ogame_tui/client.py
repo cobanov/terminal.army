@@ -83,9 +83,7 @@ class OGameClient:
     async def list_buildings(self, planet_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/planets/{planet_id}/buildings")
 
-    async def upgrade_building(
-        self, planet_id: int, building_type: str
-    ) -> dict[str, Any]:
+    async def upgrade_building(self, planet_id: int, building_type: str) -> dict[str, Any]:
         return await self._request(
             "POST", f"/planets/{planet_id}/buildings/{building_type}/upgrade"
         )
@@ -100,17 +98,13 @@ class OGameClient:
     async def list_researches(self) -> dict[str, Any]:
         return await self._request("GET", "/researches")
 
-    async def upgrade_research(
-        self, tech_type: str, planet_id: int
-    ) -> dict[str, Any]:
+    async def upgrade_research(self, tech_type: str, planet_id: int) -> dict[str, Any]:
         return await self._request(
             "POST", f"/researches/{tech_type}/upgrade", params={"planet_id": planet_id}
         )
 
     # ----- Galaxy ---------------------------------------------------------
-    async def view_galaxy(
-        self, universe_id: int, galaxy: int, system: int
-    ) -> dict[str, Any]:
+    async def view_galaxy(self, universe_id: int, galaxy: int, system: int) -> dict[str, Any]:
         return await self._request(
             "GET",
             "/galaxy",
@@ -143,25 +137,17 @@ class OGameClient:
     async def threads(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/messages/threads")
 
-    async def conversation(
-        self, username: str, limit: int = 100
-    ) -> list[dict[str, Any]]:
-        return await self._request(
-            "GET", f"/messages/with/{username}", params={"limit": limit}
-        )
+    async def conversation(self, username: str, limit: int = 100) -> list[dict[str, Any]]:
+        return await self._request("GET", f"/messages/with/{username}", params={"limit": limit})
 
     async def planet_logs(self, planet_id: int, limit: int = 20) -> list[dict[str, Any]]:
-        return await self._request(
-            "GET", f"/planets/{planet_id}/logs", params={"limit": limit}
-        )
+        return await self._request("GET", f"/planets/{planet_id}/logs", params={"limit": limit})
 
     # ----- Shipyard -------------------------------------------------------
     async def list_ships(self, planet_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/planets/{planet_id}/ships")
 
-    async def build_ship(
-        self, planet_id: int, ship_type: str, count: int
-    ) -> dict[str, Any]:
+    async def build_ship(self, planet_id: int, ship_type: str, count: int) -> dict[str, Any]:
         return await self._request(
             "POST",
             f"/planets/{planet_id}/shipyard/build/{ship_type}",
@@ -172,9 +158,7 @@ class OGameClient:
     async def list_defenses(self, planet_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/planets/{planet_id}/defenses")
 
-    async def build_defense(
-        self, planet_id: int, defense_type: str, count: int
-    ) -> dict[str, Any]:
+    async def build_defense(self, planet_id: int, defense_type: str, count: int) -> dict[str, Any]:
         return await self._request(
             "POST",
             f"/planets/{planet_id}/defense/build/{defense_type}",
@@ -233,11 +217,10 @@ class OGameClient:
     async def get_alliance(self, tag: str) -> dict[str, Any]:
         return await self._request("GET", f"/api/alliances/{tag}")
 
-    async def create_alliance(
-        self, tag: str, name: str, description: str = ""
-    ) -> dict[str, Any]:
+    async def create_alliance(self, tag: str, name: str, description: str = "") -> dict[str, Any]:
         return await self._request(
-            "POST", "/api/alliances",
+            "POST",
+            "/api/alliances",
             json={"tag": tag, "name": name, "description": description},
         )
 

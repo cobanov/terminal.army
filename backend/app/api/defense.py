@@ -13,7 +13,6 @@ from backend.app.game.constants import (
     DEFENSE_STATS,
     BuildingType,
     DefenseType,
-    TechType,
 )
 from backend.app.game.formulas import build_time_seconds
 from backend.app.models.building import Building
@@ -49,9 +48,7 @@ class DefensesResponse(BaseModel):
 
 
 @router.get("/planets/{planet_id}/defenses", response_model=DefensesResponse)
-async def list_defenses(
-    planet_id: int, user: CurrentUser, db: DBSession
-) -> DefensesResponse:
+async def list_defenses(planet_id: int, user: CurrentUser, db: DBSession) -> DefensesResponse:
     planet = await db.get(Planet, planet_id)
     if planet is None or planet.owner_user_id != user.id:
         raise HTTPException(status_code=404, detail="planet not found")
@@ -67,9 +64,7 @@ async def list_defenses(
     tech_res = await db.execute(select(Research).where(Research.user_id == user.id))
     techs = {r.tech_type: r.level for r in tech_res.scalars().all()}
 
-    stock_res = await db.execute(
-        select(PlanetDefense).where(PlanetDefense.planet_id == planet_id)
-    )
+    stock_res = await db.execute(select(PlanetDefense).where(PlanetDefense.planet_id == planet_id))
     stock = {r.defense_type: r.count for r in stock_res.scalars().all()}
 
     rows: list[DefenseRow] = []
@@ -85,21 +80,25 @@ async def list_defenses(
             else:
                 if techs.get(k, 0) < v:
                     missing.append(f"{k} L{v}")
-        rows.append(DefenseRow(
-            defense_type=dt.value,
-            label=DEFENSE_LABELS[dt],
-            count=stock.get(dt.value, 0),
-            cost_metal=m, cost_crystal=c, cost_deuterium=d,
-            structural_integrity=hull, shield_power=shield, weapon_power=weapon,
-            build_seconds=per_unit_seconds,
-            unique=dt in UNIQUE_DEFENSES,
-            prereq_met=len(missing) == 0,
-            prereq_missing=missing,
-        ))
+        rows.append(
+            DefenseRow(
+                defense_type=dt.value,
+                label=DEFENSE_LABELS[dt],
+                count=stock.get(dt.value, 0),
+                cost_metal=m,
+                cost_crystal=c,
+                cost_deuterium=d,
+                structural_integrity=hull,
+                shield_power=shield,
+                weapon_power=weapon,
+                build_seconds=per_unit_seconds,
+                unique=dt in UNIQUE_DEFENSES,
+                prereq_met=len(missing) == 0,
+                prereq_missing=missing,
+            )
+        )
 
-    return DefensesResponse(
-        planet_id=planet_id, shipyard_level=shipyard_lvl, defenses=rows
-    )
+    return DefensesResponse(planet_id=planet_id, shipyard_level=shipyard_lvl, defenses=rows)
 
 
 class BuildDefenseRequest(BaseModel):

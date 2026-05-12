@@ -226,7 +226,11 @@ async def list_threads(user: CurrentUser, db: DBSession) -> list[ThreadSummary]:
             .limit(1)
         )
         last = (await db.execute(last_msg_q)).scalar_one_or_none()
-        preview = (last.body[:60] + "...") if last and len(last.body) > 60 else (last.body if last else "")
+        preview = (
+            (last.body[:60] + "...")
+            if last and len(last.body) > 60
+            else (last.body if last else "")
+        )
         out.append(
             ThreadSummary(
                 other_username=row.username,

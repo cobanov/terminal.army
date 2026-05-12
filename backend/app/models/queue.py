@@ -38,9 +38,7 @@ class BuildQueue(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
-    finished_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     applied: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

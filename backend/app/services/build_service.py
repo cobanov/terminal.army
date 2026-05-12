@@ -28,9 +28,7 @@ MAX_BUILDING_QUEUE = 5
 
 async def _get_building_level(db: AsyncSession, planet_id: int, bt: BuildingType) -> int:
     result = await db.execute(
-        select(Building).where(
-            Building.planet_id == planet_id, Building.building_type == bt.value
-        )
+        select(Building).where(Building.planet_id == planet_id, Building.building_type == bt.value)
     )
     b = result.scalar_one_or_none()
     return b.level if b else 0
@@ -50,9 +48,7 @@ async def _active_queue_count(db: AsyncSession, planet_id: int, queue_type: str)
     return int(result.scalar() or 0)
 
 
-async def _pending_upgrades_for_building(
-    db: AsyncSession, planet_id: int, bt: BuildingType
-) -> int:
+async def _pending_upgrades_for_building(db: AsyncSession, planet_id: int, bt: BuildingType) -> int:
     result = await db.execute(
         select(func.count())
         .select_from(BuildQueue)
@@ -165,9 +161,7 @@ async def queue_building_upgrade(
     return queue
 
 
-async def cancel_queue_item(
-    db: AsyncSession, queue_id: int, user_id: int
-) -> BuildQueue:
+async def cancel_queue_item(db: AsyncSession, queue_id: int, user_id: int) -> BuildQueue:
     queue = await db.get(BuildQueue, queue_id)
     if queue is None or queue.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="queue item not found")
@@ -176,7 +170,10 @@ async def cancel_queue_item(
             status_code=status.HTTP_400_BAD_REQUEST, detail="queue item already finalized"
         )
 
-    planet = await db.get(Planet, queue.planet_id)
+    # Lock the planet before refunding so a concurrent upgrade on the same
+    # planet sees a consistent balance.
+    locked = await db.execute(select(Planet).where(Planet.id == queue.planet_id).with_for_update())
+    planet = locked.scalar_one_or_none()
     if planet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="planet not found")
 

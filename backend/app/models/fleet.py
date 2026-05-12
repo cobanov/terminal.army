@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
@@ -19,11 +19,11 @@ class FleetMission(StrEnum):
 
 
 class FleetStatus(StrEnum):
-    OUTBOUND = "outbound"      # heading to target
-    RETURNING = "returning"     # heading back
-    ARRIVED = "arrived"         # at target (deploy/colonize done; or before action)
-    COMPLETED = "completed"     # fully done (returned)
-    DESTROYED = "destroyed"     # lost in combat
+    OUTBOUND = "outbound"  # heading to target
+    RETURNING = "returning"  # heading back
+    ARRIVED = "arrived"  # at target (deploy/colonize done; or before action)
+    COMPLETED = "completed"  # fully done (returned)
+    DESTROYED = "destroyed"  # lost in combat
 
 
 class Fleet(Base):
@@ -40,25 +40,21 @@ class Fleet(Base):
     )
 
     mission: Mapped[str] = mapped_column(String(16), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), default=FleetStatus.OUTBOUND.value, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default=FleetStatus.OUTBOUND.value, nullable=False
+    )
 
     # Target coords (may not map to an existing planet, e.g. empty slot)
-    universe_id: Mapped[int] = mapped_column(
-        ForeignKey("universes.id"), nullable=False
-    )
+    universe_id: Mapped[int] = mapped_column(ForeignKey("universes.id"), nullable=False)
     target_galaxy: Mapped[int] = mapped_column(Integer, nullable=False)
     target_system: Mapped[int] = mapped_column(Integer, nullable=False)
     target_position: Mapped[int] = mapped_column(Integer, nullable=False)
-    target_planet_id: Mapped[int | None] = mapped_column(
-        ForeignKey("planets.id"), nullable=True
-    )
+    target_planet_id: Mapped[int | None] = mapped_column(ForeignKey("planets.id"), nullable=True)
 
     speed_percent: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     departure_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     arrival_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    return_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    return_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     cargo_metal: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     cargo_crystal: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

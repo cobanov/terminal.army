@@ -13,9 +13,9 @@ from backend.app.services.resource_service import refresh_planet_resources
 async def _register(client, name: str) -> str:
     await client.post(
         "/auth/register",
-        json={"username": name, "email": f"{name}@example.com", "password": "secret1"},
+        json={"username": name, "email": f"{name}@example.com", "password": "secret1pass"},
     )
-    r = await client.post("/auth/login", data={"username": name, "password": "secret1"})
+    r = await client.post("/auth/login", data={"username": name, "password": "secret1pass"})
     return r.json()["access_token"]
 
 
@@ -30,9 +30,7 @@ async def test_lazy_update_passive_metal(client) -> None:
         planet.resources_last_updated_at = datetime.now(UTC) - timedelta(hours=1)
         await db.commit()
 
-    r = await client.get(
-        f"/planets/{planet_id}", headers={"Authorization": f"Bearer {token}"}
-    )
+    r = await client.get(f"/planets/{planet_id}", headers={"Authorization": f"Bearer {token}"})
     body = r.json()
     # Level 0 madenler base passive 30 m/h + 15 c/h verir
     assert body["resources_metal"] >= 500 + 29
@@ -76,9 +74,7 @@ async def test_lazy_update_mine_with_solar_plant(client) -> None:
     planet_id = r.json()[0]["id"]
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Building).where(Building.planet_id == planet_id)
-        )
+        result = await db.execute(select(Building).where(Building.planet_id == planet_id))
         for b in result.scalars().all():
             if b.building_type == "metal_mine":
                 b.level = 5

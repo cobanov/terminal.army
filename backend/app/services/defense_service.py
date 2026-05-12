@@ -38,10 +38,12 @@ from backend.app.services.resource_service import refresh_planet_resources
 
 MAX_DEFENSE_QUEUE = 5
 # Unlike turrets, shield domes are unique-per-planet (max 1).
-UNIQUE_DEFENSES: frozenset[DefenseType] = frozenset({
-    DefenseType.SMALL_SHIELD_DOME,
-    DefenseType.LARGE_SHIELD_DOME,
-})
+UNIQUE_DEFENSES: frozenset[DefenseType] = frozenset(
+    {
+        DefenseType.SMALL_SHIELD_DOME,
+        DefenseType.LARGE_SHIELD_DOME,
+    }
+)
 
 
 async def _user_tech_levels(db: AsyncSession, user_id: int) -> dict[TechType, int]:
@@ -76,9 +78,7 @@ async def _check_defense_prereq(
     return missing
 
 
-async def _current_count(
-    db: AsyncSession, planet_id: int, dt: DefenseType
-) -> int:
+async def _current_count(db: AsyncSession, planet_id: int, dt: DefenseType) -> int:
     """Built + queued (not yet applied) count of a given defense type."""
     built_res = await db.execute(
         select(PlanetDefense).where(
@@ -135,9 +135,7 @@ async def queue_defense_build(
 
     missing = await _check_defense_prereq(db, planet_id, user_id, defense_type)
     if missing:
-        raise HTTPException(
-            status_code=400, detail=f"prereq not met: {', '.join(missing)}"
-        )
+        raise HTTPException(status_code=400, detail=f"prereq not met: {', '.join(missing)}")
 
     m, c, d, *_ = DEFENSE_STATS[defense_type]
     tot_m, tot_c, tot_d = m * count, c * count, d * count

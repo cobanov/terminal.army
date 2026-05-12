@@ -8,22 +8,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import floor, sqrt
-from typing import Iterable
 
 from backend.app.game.constants import (
+    DEFENSE_STATS,
     SHIP_DRIVE,
     SHIP_STATS,
-    DEFENSE_STATS,
-    ShipType,
     DefenseType,
+    ShipType,
     TechType,
 )
 
 
 # ---------- Distance / duration / fuel -------------------------------------
 def distance(
-    g_from: int, s_from: int, p_from: int,
-    g_to: int, s_to: int, p_to: int,
+    g_from: int,
+    s_from: int,
+    p_from: int,
+    g_to: int,
+    s_to: int,
+    p_to: int,
 ) -> int:
     """Inter-coordinate distance per OGame formula.
 
@@ -72,10 +75,9 @@ def flight_duration_seconds(
     if fleet_speed <= 0:
         return 1
     sp = max(10, min(100, speed_percent)) / 100.0
-    base = (
-        3500.0 * sqrt(distance_units * 10.0 / fleet_speed) / fleet_speed
-        + 10.0
-    ) / max(1, universe_speed_fleet)
+    base = (3500.0 * sqrt(distance_units * 10.0 / fleet_speed) / fleet_speed + 10.0) / max(
+        1, universe_speed_fleet
+    )
     return max(1, int(base / sp))
 
 
@@ -158,9 +160,9 @@ class CombatUnit:
 
     name: str
     count: int
-    weapon: int     # base attack
-    shield: int     # per-unit shield
-    armor: int      # per-unit structural integrity (armor)
+    weapon: int  # base attack
+    shield: int  # per-unit shield
+    armor: int  # per-unit structural integrity (armor)
 
 
 def _apply_tech_mods(
@@ -191,7 +193,9 @@ def build_units_from_ships(
             continue
         m, c, d, armor, shld, atk, *_ = SHIP_STATS[st]
         atk2, shld2, armor2 = _apply_tech_mods(atk, shld, armor, weapons, shielding, armour)
-        units.append(CombatUnit(name=st.value, count=count, weapon=atk2, shield=shld2, armor=armor2))
+        units.append(
+            CombatUnit(name=st.value, count=count, weapon=atk2, shield=shld2, armor=armor2)
+        )
     return units
 
 
@@ -207,7 +211,9 @@ def build_units_from_defenses(
             continue
         m, c, d, armor, shld, atk = DEFENSE_STATS[dt]
         atk2, shld2, armor2 = _apply_tech_mods(atk, shld, armor, weapons, shielding, armour)
-        units.append(CombatUnit(name=dt.value, count=count, weapon=atk2, shield=shld2, armor=armor2))
+        units.append(
+            CombatUnit(name=dt.value, count=count, weapon=atk2, shield=shld2, armor=armor2)
+        )
     return units
 
 
@@ -311,8 +317,7 @@ def simulate_combat(
     for n, killed in atk_destroyed.items():
         # attacker ship destroyed -> debris
         try:
-            from backend.app.game.constants import ShipType as _S
-            stype = _S(n)
+            stype = ShipType(n)
             m, c, _d, *_ = SHIP_STATS[stype]
             res.debris_metal += int(0.3 * m * killed)
             res.debris_crystal += int(0.3 * c * killed)
@@ -320,8 +325,7 @@ def simulate_combat(
             pass
     for n, killed in def_destroyed.items():
         try:
-            from backend.app.game.constants import ShipType as _S
-            stype = _S(n)
+            stype = ShipType(n)
             m, c, _d, *_ = SHIP_STATS[stype]
             res.debris_metal += int(0.3 * m * killed)
             res.debris_crystal += int(0.3 * c * killed)

@@ -117,6 +117,7 @@ TECH_LABELS: dict[TechType, str] = {
 
 class ShipType(StrEnum):
     """Source: https://ogame.fandom.com/wiki/Ships"""
+
     SMALL_CARGO = "small_cargo"
     LARGE_CARGO = "large_cargo"
     LIGHT_FIGHTER = "light_fighter"
@@ -149,6 +150,7 @@ SHIP_LABELS: dict[ShipType, str] = {
 
 class DefenseType(StrEnum):
     """Source: https://ogame.fandom.com/wiki/Defense"""
+
     ROCKET_LAUNCHER = "rocket_launcher"
     LIGHT_LASER = "light_laser"
     HEAVY_LASER = "heavy_laser"
@@ -321,36 +323,57 @@ TECH_PREREQUISITES: dict[TechType, dict[str, int]] = {
 # Speed values are baseline at drive tech 0.
 SHIP_STATS: dict[ShipType, tuple[int, int, int, int, int, int, int, int, int]] = {
     # name:                (M,    C,     D,   armor, shld, atk,   speed,  cargo, fuel)
-    ShipType.SMALL_CARGO:    (2000, 2000, 0,   4000,  10,   5,     5000,   5000,  10),
-    ShipType.LARGE_CARGO:    (6000, 6000, 0,   12000, 25,   5,     7500,   25000, 50),
-    ShipType.LIGHT_FIGHTER:  (3000, 1000, 0,   4000,  10,   50,    12500,  50,    20),
-    ShipType.HEAVY_FIGHTER:  (6000, 4000, 0,   10000, 25,   150,   10000,  100,   75),
-    ShipType.CRUISER:        (20000, 7000, 2000, 27000, 50,  400,   15000,  800,   300),
-    ShipType.BATTLESHIP:     (45000, 15000, 0,  60000, 200,  1000,  10000,  1500,  500),
-    ShipType.COLONY_SHIP:    (10000, 20000, 10000, 30000, 100, 50,  2500,   7500,  1000),
-    ShipType.RECYCLER:       (10000, 6000, 2000, 16000, 10,  1,     2000,   20000, 300),
-    ShipType.ESPIONAGE_PROBE: (0,    1000, 0,   1000,  1,    1,     100_000_000, 5, 1),
-    ShipType.BOMBER:         (50000, 25000, 15000, 75000, 500, 1000, 4000,  500,   1000),
-    ShipType.DESTROYER:      (60000, 50000, 15000, 110000, 500, 2000, 5000, 2000,  1000),
-    ShipType.BATTLECRUISER:  (30000, 40000, 15000, 70000, 400, 700,  10000, 750,   250),
+    ShipType.SMALL_CARGO: (2000, 2000, 0, 4000, 10, 5, 5000, 5000, 10),
+    ShipType.LARGE_CARGO: (6000, 6000, 0, 12000, 25, 5, 7500, 25000, 50),
+    ShipType.LIGHT_FIGHTER: (3000, 1000, 0, 4000, 10, 50, 12500, 50, 20),
+    ShipType.HEAVY_FIGHTER: (6000, 4000, 0, 10000, 25, 150, 10000, 100, 75),
+    ShipType.CRUISER: (20000, 7000, 2000, 27000, 50, 400, 15000, 800, 300),
+    ShipType.BATTLESHIP: (45000, 15000, 0, 60000, 200, 1000, 10000, 1500, 500),
+    ShipType.COLONY_SHIP: (10000, 20000, 10000, 30000, 100, 50, 2500, 7500, 1000),
+    ShipType.RECYCLER: (10000, 6000, 2000, 16000, 10, 1, 2000, 20000, 300),
+    ShipType.ESPIONAGE_PROBE: (0, 1000, 0, 1000, 1, 1, 100_000_000, 5, 1),
+    ShipType.BOMBER: (50000, 25000, 15000, 75000, 500, 1000, 4000, 500, 1000),
+    ShipType.DESTROYER: (60000, 50000, 15000, 110000, 500, 2000, 5000, 2000, 1000),
+    ShipType.BATTLECRUISER: (30000, 40000, 15000, 70000, 400, 700, 10000, 750, 250),
 }
 
 
 # Ship build prereqs: {ship: {building/tech: min_level}}
 # Building prereqs use "shipyard": N; research keys use TechType values.
 SHIP_PREREQUISITES: dict[ShipType, dict[str, int]] = {
-    ShipType.SMALL_CARGO:     {"shipyard": 2, TechType.COMBUSTION_DRIVE.value: 2},
-    ShipType.LARGE_CARGO:     {"shipyard": 4, TechType.COMBUSTION_DRIVE.value: 6},
-    ShipType.LIGHT_FIGHTER:   {"shipyard": 1, TechType.COMBUSTION_DRIVE.value: 1},
-    ShipType.HEAVY_FIGHTER:   {"shipyard": 3, TechType.ARMOUR.value: 2, TechType.IMPULSE_DRIVE.value: 2},
-    ShipType.CRUISER:         {"shipyard": 5, TechType.IMPULSE_DRIVE.value: 4, TechType.ION.value: 2},
-    ShipType.BATTLESHIP:      {"shipyard": 7, TechType.HYPERSPACE_DRIVE.value: 4},
-    ShipType.COLONY_SHIP:     {"shipyard": 4, TechType.IMPULSE_DRIVE.value: 3},
-    ShipType.RECYCLER:        {"shipyard": 4, TechType.COMBUSTION_DRIVE.value: 6, TechType.SHIELDING.value: 2},
-    ShipType.ESPIONAGE_PROBE: {"shipyard": 3, TechType.COMBUSTION_DRIVE.value: 3, TechType.ESPIONAGE.value: 2},
-    ShipType.BOMBER:          {"shipyard": 8, TechType.IMPULSE_DRIVE.value: 6, TechType.PLASMA.value: 5},
-    ShipType.DESTROYER:       {"shipyard": 9, TechType.HYPERSPACE_DRIVE.value: 6, TechType.HYPERSPACE.value: 5},
-    ShipType.BATTLECRUISER:   {"shipyard": 8, TechType.HYPERSPACE_DRIVE.value: 5, TechType.LASER.value: 12, TechType.HYPERSPACE.value: 5},
+    ShipType.SMALL_CARGO: {"shipyard": 2, TechType.COMBUSTION_DRIVE.value: 2},
+    ShipType.LARGE_CARGO: {"shipyard": 4, TechType.COMBUSTION_DRIVE.value: 6},
+    ShipType.LIGHT_FIGHTER: {"shipyard": 1, TechType.COMBUSTION_DRIVE.value: 1},
+    ShipType.HEAVY_FIGHTER: {
+        "shipyard": 3,
+        TechType.ARMOUR.value: 2,
+        TechType.IMPULSE_DRIVE.value: 2,
+    },
+    ShipType.CRUISER: {"shipyard": 5, TechType.IMPULSE_DRIVE.value: 4, TechType.ION.value: 2},
+    ShipType.BATTLESHIP: {"shipyard": 7, TechType.HYPERSPACE_DRIVE.value: 4},
+    ShipType.COLONY_SHIP: {"shipyard": 4, TechType.IMPULSE_DRIVE.value: 3},
+    ShipType.RECYCLER: {
+        "shipyard": 4,
+        TechType.COMBUSTION_DRIVE.value: 6,
+        TechType.SHIELDING.value: 2,
+    },
+    ShipType.ESPIONAGE_PROBE: {
+        "shipyard": 3,
+        TechType.COMBUSTION_DRIVE.value: 3,
+        TechType.ESPIONAGE.value: 2,
+    },
+    ShipType.BOMBER: {"shipyard": 8, TechType.IMPULSE_DRIVE.value: 6, TechType.PLASMA.value: 5},
+    ShipType.DESTROYER: {
+        "shipyard": 9,
+        TechType.HYPERSPACE_DRIVE.value: 6,
+        TechType.HYPERSPACE.value: 5,
+    },
+    ShipType.BATTLECRUISER: {
+        "shipyard": 8,
+        TechType.HYPERSPACE_DRIVE.value: 5,
+        TechType.LASER.value: 12,
+        TechType.HYPERSPACE.value: 5,
+    },
 }
 
 
@@ -374,23 +397,28 @@ SHIP_DRIVE: dict[ShipType, TechType] = {
 # ---------- Defense stats -------------------------------------------------
 # (cost_metal, cost_crystal, cost_deut, structural_integrity, shield, weapon)
 DEFENSE_STATS: dict[DefenseType, tuple[int, int, int, int, int, int]] = {
-    DefenseType.ROCKET_LAUNCHER:    (2000, 0, 0,      2000,   20,   80),
-    DefenseType.LIGHT_LASER:        (1500, 500, 0,    2000,   25,   100),
-    DefenseType.HEAVY_LASER:        (6000, 2000, 0,   8000,   100,  250),
-    DefenseType.GAUSS_CANNON:       (20000, 15000, 2000, 35000, 200, 1100),
-    DefenseType.ION_CANNON:         (5000, 3000, 0,   8000,   500,  150),
-    DefenseType.PLASMA_TURRET:      (50000, 50000, 30000, 100000, 300, 3000),
-    DefenseType.SMALL_SHIELD_DOME:  (10000, 10000, 0, 20000,  2000, 1),
-    DefenseType.LARGE_SHIELD_DOME:  (50000, 50000, 0, 100000, 10000, 1),
+    DefenseType.ROCKET_LAUNCHER: (2000, 0, 0, 2000, 20, 80),
+    DefenseType.LIGHT_LASER: (1500, 500, 0, 2000, 25, 100),
+    DefenseType.HEAVY_LASER: (6000, 2000, 0, 8000, 100, 250),
+    DefenseType.GAUSS_CANNON: (20000, 15000, 2000, 35000, 200, 1100),
+    DefenseType.ION_CANNON: (5000, 3000, 0, 8000, 500, 150),
+    DefenseType.PLASMA_TURRET: (50000, 50000, 30000, 100000, 300, 3000),
+    DefenseType.SMALL_SHIELD_DOME: (10000, 10000, 0, 20000, 2000, 1),
+    DefenseType.LARGE_SHIELD_DOME: (50000, 50000, 0, 100000, 10000, 1),
 }
 
 DEFENSE_PREREQUISITES: dict[DefenseType, dict[str, int]] = {
-    DefenseType.ROCKET_LAUNCHER:   {"shipyard": 1},
-    DefenseType.LIGHT_LASER:       {"shipyard": 2, TechType.ENERGY.value: 1, TechType.LASER.value: 3},
-    DefenseType.HEAVY_LASER:       {"shipyard": 4, TechType.ENERGY.value: 3, TechType.LASER.value: 6},
-    DefenseType.GAUSS_CANNON:      {"shipyard": 6, TechType.WEAPONS.value: 3, TechType.SHIELDING.value: 1, TechType.ENERGY.value: 6},
-    DefenseType.ION_CANNON:        {"shipyard": 4, TechType.ION.value: 4},
-    DefenseType.PLASMA_TURRET:     {"shipyard": 8, TechType.PLASMA.value: 7},
+    DefenseType.ROCKET_LAUNCHER: {"shipyard": 1},
+    DefenseType.LIGHT_LASER: {"shipyard": 2, TechType.ENERGY.value: 1, TechType.LASER.value: 3},
+    DefenseType.HEAVY_LASER: {"shipyard": 4, TechType.ENERGY.value: 3, TechType.LASER.value: 6},
+    DefenseType.GAUSS_CANNON: {
+        "shipyard": 6,
+        TechType.WEAPONS.value: 3,
+        TechType.SHIELDING.value: 1,
+        TechType.ENERGY.value: 6,
+    },
+    DefenseType.ION_CANNON: {"shipyard": 4, TechType.ION.value: 4},
+    DefenseType.PLASMA_TURRET: {"shipyard": 8, TechType.PLASMA.value: 7},
     DefenseType.SMALL_SHIELD_DOME: {"shipyard": 1, TechType.SHIELDING.value: 2},
     DefenseType.LARGE_SHIELD_DOME: {"shipyard": 6, TechType.SHIELDING.value: 6},
 }

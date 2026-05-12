@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shlex
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import monotonic
 from typing import Any
 
@@ -22,20 +22,42 @@ from ogame_tui.client import APIError
 
 # ---------- Catalog -------------------------------------------------------
 _RESOURCE_KEYS = [
-    "metal_mine", "crystal_mine", "deuterium_synthesizer",
-    "solar_plant", "fusion_reactor", "solar_satellite", "crawler",
-    "metal_storage", "crystal_storage", "deuterium_tank",
+    "metal_mine",
+    "crystal_mine",
+    "deuterium_synthesizer",
+    "solar_plant",
+    "fusion_reactor",
+    "solar_satellite",
+    "crawler",
+    "metal_storage",
+    "crystal_storage",
+    "deuterium_tank",
 ]
 _FACILITY_KEYS = [
-    "robotics_factory", "shipyard", "research_lab",
-    "alliance_depot", "missile_silo", "nanite_factory", "terraformer",
+    "robotics_factory",
+    "shipyard",
+    "research_lab",
+    "alliance_depot",
+    "missile_silo",
+    "nanite_factory",
+    "terraformer",
 ]
 _BUILDING_KEYS = _RESOURCE_KEYS + _FACILITY_KEYS
 _TECH_KEYS = [
-    "energy", "laser", "ion", "hyperspace", "plasma",
-    "computer", "astrophysics", "espionage",
-    "combustion_drive", "impulse_drive", "hyperspace_drive",
-    "weapons", "shielding", "armour",
+    "energy",
+    "laser",
+    "ion",
+    "hyperspace",
+    "plasma",
+    "computer",
+    "astrophysics",
+    "espionage",
+    "combustion_drive",
+    "impulse_drive",
+    "hyperspace_drive",
+    "weapons",
+    "shielding",
+    "armour",
 ]
 
 # Tech tree: (parent -> children). Each node placed under its deepest
@@ -43,8 +65,11 @@ _TECH_KEYS = [
 # under hyperspace; weapons, armour, computer are roots.
 _TECH_CHILDREN: dict[str, list[str]] = {
     "energy": [
-        "laser", "hyperspace",
-        "combustion_drive", "impulse_drive", "shielding",
+        "laser",
+        "hyperspace",
+        "combustion_drive",
+        "impulse_drive",
+        "shielding",
     ],
     "laser": ["ion"],
     "ion": ["plasma"],
@@ -77,44 +102,44 @@ class CommandSpec:
 
 
 COMMANDS: list[CommandSpec] = [
-    CommandSpec("/help",       "/help",            "show all commands"),
-    CommandSpec("/planets",    "/planets",         "list my planets"),
-    CommandSpec("/planet",     "/planet",          "current planet detail"),
-    CommandSpec("/switch ",    "/switch <id>",     "change active planet"),
-    CommandSpec("/buildings",  "/buildings",       "all buildings (resources + facilities)"),
-    CommandSpec("/resources",  "/resources",       "mines, energy, storage, crawlers"),
-    CommandSpec("/facilities", "/facilities",      "industry, research, depots"),
-    CommandSpec("/upgrade ",   "/upgrade <type>",  "upgrade a building (+1)"),
-    CommandSpec("/research",   "/research [type]", "list tech or upgrade one"),
-    CommandSpec("/tree",       "/tree",            "tech tree with prereqs"),
-    CommandSpec("/galaxy ",    "/galaxy <g>:<s>",  "galaxy system view"),
-    CommandSpec("/queue",      "/queue",           "active build/research queue"),
-    CommandSpec("/cancel ",    "/cancel <id>",     "cancel a queue item"),
-    CommandSpec("/players",    "/players",         "list players in this universe"),
-    CommandSpec("/msg ",       "/msg <user> <text>", "send a message"),
-    CommandSpec("/inbox",      "/inbox [user]",    "conversations (or chat with user)"),
-    CommandSpec("/logs",       "/logs [N]",        "recent activity on this planet"),
-    CommandSpec("/ships",      "/ships",           "ships in shipyard + buildable"),
-    CommandSpec("/build ",     "/build <type> <n>", "build N ships in shipyard"),
-    CommandSpec("/defense",    "/defense",          "planetary defenses + buildable"),
-    CommandSpec("/defend ",    "/defend <type> <n>", "build N defenses on planet"),
-    CommandSpec("/fleets",     "/fleets",          "active fleet movements"),
-    CommandSpec("/send",       "/send",            "fleet send wizard (see /help)"),
+    CommandSpec("/help", "/help", "show all commands"),
+    CommandSpec("/planets", "/planets", "list my planets"),
+    CommandSpec("/planet", "/planet", "current planet detail"),
+    CommandSpec("/switch ", "/switch <id>", "change active planet"),
+    CommandSpec("/buildings", "/buildings", "all buildings (resources + facilities)"),
+    CommandSpec("/resources", "/resources", "mines, energy, storage, crawlers"),
+    CommandSpec("/facilities", "/facilities", "industry, research, depots"),
+    CommandSpec("/upgrade ", "/upgrade <type>", "upgrade a building (+1)"),
+    CommandSpec("/research", "/research [type]", "list tech or upgrade one"),
+    CommandSpec("/tree", "/tree", "tech tree with prereqs"),
+    CommandSpec("/galaxy ", "/galaxy <g>:<s>", "galaxy system view"),
+    CommandSpec("/queue", "/queue", "active build/research queue"),
+    CommandSpec("/cancel ", "/cancel <id>", "cancel a queue item"),
+    CommandSpec("/players", "/players", "list players in this universe"),
+    CommandSpec("/msg ", "/msg <user> <text>", "send a message"),
+    CommandSpec("/inbox", "/inbox [user]", "conversations (or chat with user)"),
+    CommandSpec("/logs", "/logs [N]", "recent activity on this planet"),
+    CommandSpec("/ships", "/ships", "ships in shipyard + buildable"),
+    CommandSpec("/build ", "/build <type> <n>", "build N ships in shipyard"),
+    CommandSpec("/defense", "/defense", "planetary defenses + buildable"),
+    CommandSpec("/defend ", "/defend <type> <n>", "build N defenses on planet"),
+    CommandSpec("/fleets", "/fleets", "active fleet movements"),
+    CommandSpec("/send", "/send", "fleet send wizard (see /help)"),
     CommandSpec("/espionage ", "/espionage <g>:<s>:<p>", "send probes to target"),
-    CommandSpec("/attack ",    "/attack <g>:<s>:<p>", "attack a target (see /help)"),
+    CommandSpec("/attack ", "/attack <g>:<s>:<p>", "attack a target (see /help)"),
     CommandSpec("/transport ", "/transport <g>:<s>:<p>", "transport resources"),
-    CommandSpec("/reports",    "/reports [id]",    "list reports or open one"),
-    CommandSpec("/leaderboard","/leaderboard",     "server rankings"),
-    CommandSpec("/alliances",  "/alliances",       "list alliances"),
-    CommandSpec("/alliance",   "/alliance [tag]",  "alliance detail or your own"),
-    CommandSpec("/found ",     "/found <tag> <name>", "found a new alliance"),
-    CommandSpec("/join ",      "/join <tag>",      "join an alliance"),
-    CommandSpec("/leave",      "/leave",           "leave your alliance"),
-    CommandSpec("/me",         "/me",              "show my account"),
-    CommandSpec("/refresh",    "/refresh",         "force refresh"),
-    CommandSpec("/clear",      "/clear",           "clear log"),
-    CommandSpec("/logout",     "/logout",          "delete key and exit"),
-    CommandSpec("/quit",       "/quit",            "exit"),
+    CommandSpec("/reports", "/reports [id]", "list reports or open one"),
+    CommandSpec("/leaderboard", "/leaderboard", "server rankings"),
+    CommandSpec("/alliances", "/alliances", "list alliances"),
+    CommandSpec("/alliance", "/alliance [tag]", "alliance detail or your own"),
+    CommandSpec("/found ", "/found <tag> <name>", "found a new alliance"),
+    CommandSpec("/join ", "/join <tag>", "join an alliance"),
+    CommandSpec("/leave", "/leave", "leave your alliance"),
+    CommandSpec("/me", "/me", "show my account"),
+    CommandSpec("/refresh", "/refresh", "force refresh"),
+    CommandSpec("/clear", "/clear", "clear log"),
+    CommandSpec("/logout", "/logout", "delete key and exit"),
+    CommandSpec("/quit", "/quit", "exit"),
 ]
 
 
@@ -278,7 +303,7 @@ def _fmt_int(v: float | int) -> str:
 def _parse_utc(iso_str: str) -> datetime:
     dt = datetime.fromisoformat(iso_str)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -291,7 +316,7 @@ def _local_hhmmss(iso_str: str) -> str:
 
 def _remaining_str(iso_str: str) -> str:
     try:
-        delta = (_parse_utc(iso_str) - datetime.now(timezone.utc)).total_seconds()
+        delta = (_parse_utc(iso_str) - datetime.now(UTC)).total_seconds()
     except Exception:
         return "?"
     if delta < 0:
@@ -358,7 +383,20 @@ def _nav_text() -> Text:
     sections: list[tuple[str, list[str]]] = [
         ("PLANET", ["/planet", "/resources", "/facilities", "/upgrade", "/queue", "/cancel"]),
         ("RESEARCH", ["/research", "/tree"]),
-        ("FLEET", ["/ships", "/build", "/defense", "/defend", "/fleets", "/espionage", "/attack", "/transport", "/reports"]),
+        (
+            "FLEET",
+            [
+                "/ships",
+                "/build",
+                "/defense",
+                "/defend",
+                "/fleets",
+                "/espionage",
+                "/attack",
+                "/transport",
+                "/reports",
+            ],
+        ),
         ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", ["/msg", "/inbox", "/players"]),
         ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
@@ -372,9 +410,14 @@ def _nav_text() -> Text:
         for cmd in cmds:
             # match the matching CommandSpec for the display label
             spec = next(
-                (s for s in COMMANDS if s.completion.rstrip().rstrip("/").startswith(cmd) or
-                 s.completion.strip() == cmd or
-                 s.completion.strip() == cmd + " "), None,
+                (
+                    s
+                    for s in COMMANDS
+                    if s.completion.rstrip().rstrip("/").startswith(cmd)
+                    or s.completion.strip() == cmd
+                    or s.completion.strip() == cmd + " "
+                ),
+                None,
             )
             label = spec.label if spec else cmd
             t.append(f"  {label}\n", style="cyan")
@@ -581,9 +624,7 @@ class ReplScreen(Screen):
         try:
             players = await self.app.client.list_players()
             me_username = self._username()
-            self._players_cache = [
-                p["username"] for p in players if p["username"] != me_username
-            ]
+            self._players_cache = [p["username"] for p in players if p["username"] != me_username]
         except APIError:
             pass
         self._render_top_bar()
@@ -708,7 +749,7 @@ class ReplScreen(Screen):
             body.append("⚠ ", style="bold red")
             body.append("energy deficit", style="bold red")
             body.append(" — mines throttled to ", style="red")
-            body.append(f"{en['production_factor']*100:.0f}%", style="bold red")
+            body.append(f"{en['production_factor'] * 100:.0f}%", style="bold red")
             body.append("; build a solar plant", style="red")
         self._planet_card.update(body)
 
@@ -899,7 +940,7 @@ class ReplScreen(Screen):
             await self._handle(raw)
         except APIError as exc:
             self._log.write(f"[red]error {exc.status_code}:[/red] {exc.detail}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._log.write(f"[red]exception:[/red] {exc!r}")
         await self._refresh_dashboard()
 
@@ -916,31 +957,49 @@ class ReplScreen(Screen):
         args = parts[1:]
 
         aliases = {
-            "q": "quit", "exit": "quit",
-            "h": "help", "?": "help",
-            "p": "planet", "ps": "planets",
-            "b": "buildings", "bld": "buildings",
-            "rs": "resources", "fc": "facilities", "fac": "facilities",
+            "q": "quit",
+            "exit": "quit",
+            "h": "help",
+            "?": "help",
+            "p": "planet",
+            "ps": "planets",
+            "b": "buildings",
+            "bld": "buildings",
+            "rs": "resources",
+            "fc": "facilities",
+            "fac": "facilities",
             "u": "upgrade",
-            "r": "research", "res": "research",
+            "r": "research",
+            "res": "research",
             "g": "galaxy",
             "qu": "queue",
             "m": "msg",
-            "in": "inbox", "ib": "inbox",
+            "in": "inbox",
+            "ib": "inbox",
             "pl": "players",
             "t": "tree",
-            "l": "logs", "log": "logs", "activity": "logs",
-            "sh": "ships", "shp": "ships",
+            "l": "logs",
+            "log": "logs",
+            "activity": "logs",
+            "sh": "ships",
+            "shp": "ships",
             "bs": "build",
-            "def": "defense", "defs": "defense",
+            "def": "defense",
+            "defs": "defense",
             "dfd": "defend",
-            "f": "fleets", "fl": "fleets",
-            "esp": "espionage", "spy": "espionage",
+            "f": "fleets",
+            "fl": "fleets",
+            "esp": "espionage",
+            "spy": "espionage",
             "atk": "attack",
-            "trans": "transport", "tx": "transport",
+            "trans": "transport",
+            "tx": "transport",
             "rep": "reports",
-            "lb": "leaderboard", "rank": "leaderboard", "ranking": "leaderboard",
-            "ally": "alliance", "all": "alliances",
+            "lb": "leaderboard",
+            "rank": "leaderboard",
+            "ranking": "leaderboard",
+            "ally": "alliance",
+            "all": "alliances",
         }
         cmd = aliases.get(cmd, cmd)
 
@@ -1050,9 +1109,7 @@ class ReplScreen(Screen):
         )
         self._log.write(t)
 
-    async def _render_buildings(
-        self, title: str, keys: list[str] | None = None
-    ) -> None:
+    async def _render_buildings(self, title: str, keys: list[str] | None = None) -> None:
         pid = self._require_planet()
         if pid is None:
             return
@@ -1112,9 +1169,7 @@ class ReplScreen(Screen):
             return
         bt = args[0].lower()
         if bt not in _BUILDING_KEYS:
-            self._log.write(
-                f"[red]unknown building:[/red] {bt}  [dim]/buildings to list[/dim]"
-            )
+            self._log.write(f"[red]unknown building:[/red] {bt}  [dim]/buildings to list[/dim]")
             return
         r = await self.app.client.upgrade_building(pid, bt)
         self._log.write(
@@ -1168,9 +1223,7 @@ class ReplScreen(Screen):
         if pid is None:
             return
         if tech not in _TECH_KEYS:
-            self._log.write(
-                f"[red]unknown tech:[/red] {tech}  [dim]/research to list[/dim]"
-            )
+            self._log.write(f"[red]unknown tech:[/red] {tech}  [dim]/research to list[/dim]")
             return
         r = await self.app.client.upgrade_research(tech, pid)
         self._log.write(
@@ -1232,8 +1285,7 @@ class ReplScreen(Screen):
                 render(child, depth + 1, is_last=(i == len(children) - 1))
 
         roots = [
-            tt for tt in _TECH_KEYS
-            if not any(k != "lab" for k in _TECH_REQS.get(tt, {}).keys())
+            tt for tt in _TECH_KEYS if not any(k != "lab" for k in _TECH_REQS.get(tt, {}).keys())
         ]
         for i, tt in enumerate(roots):
             render(tt, 0, is_last=(i == len(roots) - 1))
@@ -1333,7 +1385,9 @@ class ReplScreen(Screen):
                 name = f"[bold green]{name}[/bold green]"
             ally = f"[{r['alliance_tag']}]" if r.get("alliance_tag") else "-"
             t.add_row(
-                medal, name, ally,
+                medal,
+                name,
+                ally,
                 _fmt_int(r["building_points"]),
                 _fmt_int(r["research_points"]),
                 _fmt_int(r["fleet_points"]),
@@ -1352,7 +1406,9 @@ class ReplScreen(Screen):
         my = await self.app.client.my_alliance()
         my_tag = my["tag"] if my else None
         if not rows:
-            self._log.write("[dim]no alliances yet — found one with[/dim] [yellow]/found <tag> <name>[/yellow]")
+            self._log.write(
+                "[dim]no alliances yet — found one with[/dim] [yellow]/found <tag> <name>[/yellow]"
+            )
             return
         t = Table(show_header=True, header_style="bold yellow", box=None)
         t.add_column("tag", style="bold yellow")
@@ -1361,14 +1417,12 @@ class ReplScreen(Screen):
         t.add_column("founder", style="dim")
         for r in rows:
             tag = f"[{r['tag']}]"
-            if r['tag'] == my_tag:
+            if r["tag"] == my_tag:
                 tag = f"[bold green]{tag}[/bold green]"
             t.add_row(tag, r["name"], str(r["member_count"]), r["founder_username"])
         self._log.write(t)
         if my_tag:
-            self._log.write(
-                f"[dim]you are in[/dim] [bold yellow][{my_tag}][/bold yellow]"
-            )
+            self._log.write(f"[dim]you are in[/dim] [bold yellow][{my_tag}][/bold yellow]")
         else:
             self._log.write(
                 "[dim]join one with[/dim] [yellow]/join <tag>[/yellow] "
@@ -1422,8 +1476,7 @@ class ReplScreen(Screen):
     async def _cmd_found(self, args: list[str]) -> None:
         if len(args) < 2:
             self._log.write(
-                "[red]usage:[/red] /found <TAG> <name...> "
-                "[dim](TAG = 2-6 alphanumeric chars)[/dim]"
+                "[red]usage:[/red] /found <TAG> <name...> [dim](TAG = 2-6 alphanumeric chars)[/dim]"
             )
             return
         tag = args[0]
@@ -1484,7 +1537,9 @@ class ReplScreen(Screen):
             mark = "[green](you)[/green]" if p["id"] == me_id else ""
             t.add_row(str(p["id"]), p["username"], mark)
         self._log.write(t)
-        self._log.write("[dim]use[/dim] [cyan]/msg <username> <text>[/cyan] [dim]to send a message[/dim]")
+        self._log.write(
+            "[dim]use[/dim] [cyan]/msg <username> <text>[/cyan] [dim]to send a message[/dim]"
+        )
 
     async def _cmd_msg(self, args: list[str]) -> None:
         # No args -> show conversation list (same as /inbox)
@@ -1533,14 +1588,12 @@ class ReplScreen(Screen):
             preview = th["last_preview"]
             if th["last_from_me"]:
                 preview = f"you: {preview}"
-            unread_suffix = (
-                f"  [magenta]({th['unread_count']})[/magenta]"
-                if th["unread_count"] > 0
-                else ""
-            )
             t.add_row(
                 Text(unread_marker, style=unread_style),
-                Text(th["other_username"] + (f" ({th['unread_count']})" if th['unread_count'] else "")),
+                Text(
+                    th["other_username"]
+                    + (f" ({th['unread_count']})" if th["unread_count"] else "")
+                ),
                 _short_dt(th["last_at"]),
                 preview,
             )
@@ -1565,7 +1618,7 @@ class ReplScreen(Screen):
 
         me_username = self._username()
         header = Text()
-        header.append(f"━━━ conversation with ", style="bold yellow")
+        header.append("━━━ conversation with ", style="bold yellow")
         header.append(username, style="bold yellow")
         header.append(f"  ({len(messages)} messages) ", style="dim")
         header.append("━" * 10, style="cyan")
@@ -1618,7 +1671,9 @@ class ReplScreen(Screen):
             base = "" if avail else "dim"
             if not avail:
                 status = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="red")
-            elif cur_m < s["cost_metal"] or cur_c < s["cost_crystal"] or cur_d < s["cost_deuterium"]:
+            elif (
+                cur_m < s["cost_metal"] or cur_c < s["cost_crystal"] or cur_d < s["cost_deuterium"]
+            ):
                 status = Text("need resources", style="yellow")
             else:
                 status = Text("ready", style="green")
@@ -1640,7 +1695,9 @@ class ReplScreen(Screen):
         if pid is None:
             return
         if len(args) < 2:
-            self._log.write("[red]usage:[/red] /build <ship_type> <count>  (e.g. /build small_cargo 5)")
+            self._log.write(
+                "[red]usage:[/red] /build <ship_type> <count>  (e.g. /build small_cargo 5)"
+            )
             return
         ship = args[0].lower()
         try:
@@ -1683,7 +1740,9 @@ class ReplScreen(Screen):
                 stat = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="red")
             elif s["unique"] and s["count"] >= 1:
                 stat = Text("built (max 1)", style="dim")
-            elif cur_m < s["cost_metal"] or cur_c < s["cost_crystal"] or cur_d < s["cost_deuterium"]:
+            elif (
+                cur_m < s["cost_metal"] or cur_c < s["cost_crystal"] or cur_d < s["cost_deuterium"]
+            ):
                 stat = Text("need resources", style="yellow")
             else:
                 stat = Text("ready", style="green")
@@ -1699,7 +1758,9 @@ class ReplScreen(Screen):
                 Text(_fmt_int(s["weapon_power"]), style=base or "dim"),
                 stat,
             )
-        self._log.write(Text(f"Shipyard L{data['shipyard_level']}  [* = unique, max 1]", style="bold yellow"))
+        self._log.write(
+            Text(f"Shipyard L{data['shipyard_level']}  [* = unique, max 1]", style="bold yellow")
+        )
         self._log.write(t)
         self._log.write("[dim]build:[/dim] [yellow]/defend <defense_type> <count>[/yellow]")
 
@@ -1708,7 +1769,9 @@ class ReplScreen(Screen):
         if pid is None:
             return
         if len(args) < 2:
-            self._log.write("[red]usage:[/red] /defend <defense_type> <count>  (e.g. /defend rocket_launcher 20)")
+            self._log.write(
+                "[red]usage:[/red] /defend <defense_type> <count>  (e.g. /defend rocket_launcher 20)"
+            )
             return
         dtype = args[0].lower()
         try:
@@ -1738,7 +1801,9 @@ class ReplScreen(Screen):
         t.add_column("arrival/return")
         t.add_column("cargo")
         for f in fleets:
-            ship_summary = ", ".join(f"{s['ship_type']}x{s['count']}" for s in f["ships"] if s["count"] > 0)
+            ship_summary = ", ".join(
+                f"{s['ship_type']}x{s['count']}" for s in f["ships"] if s["count"] > 0
+            )
             target = f"{f['target_galaxy']}:{f['target_system']}:{f['target_position']}"
             cargo = f"{f['cargo_metal']}/{f['cargo_crystal']}/{f['cargo_deuterium']}"
             if f["status"] == "outbound":
@@ -1828,17 +1893,14 @@ class ReplScreen(Screen):
     async def _cmd_espionage(self, args: list[str]) -> None:
         if not args:
             self._log.write(
-                "[red]usage:[/red] /espionage <g>:<s>:<p> [espionage_probe:<n>]  "
-                "(default 1 probe)"
+                "[red]usage:[/red] /espionage <g>:<s>:<p> [espionage_probe:<n>]  (default 1 probe)"
             )
             return
         await self._send_fleet_generic(args, "espionage", default_ships={"espionage_probe": 1})
 
     async def _cmd_attack(self, args: list[str]) -> None:
         if len(args) < 2:
-            self._log.write(
-                "[red]usage:[/red] /attack <g>:<s>:<p> <ship>:<n> [<ship>:<n> ...]"
-            )
+            self._log.write("[red]usage:[/red] /attack <g>:<s>:<p> <ship>:<n> [<ship>:<n> ...]")
             return
         await self._send_fleet_generic(args, "attack")
 
@@ -1894,6 +1956,7 @@ class ReplScreen(Screen):
 
     async def _show_report(self, report_id: int) -> None:
         import json as _json
+
         try:
             r = await self.app.client.get_report(report_id)
         except APIError as exc:
@@ -1922,7 +1985,7 @@ class ReplScreen(Screen):
             self._log.write(
                 f"[red]You were spied on by[/red] [bold]{body['spy_username']}[/bold]\n"
                 f"  probes sent: {body['probes_sent']}, destroyed by you: {body['probes_destroyed']}, "
-                f"counter chance: {body['counter_chance']*100:.0f}%"
+                f"counter chance: {body['counter_chance'] * 100:.0f}%"
             )
             return
         info = body.get("info_level", 1)
@@ -1937,17 +2000,17 @@ class ReplScreen(Screen):
             f"C [cyan]{_fmt_int(r['crystal'])}[/cyan] "
             f"D [magenta]{_fmt_int(r['deuterium'])}[/magenta]"
         )
-        if "fleet" in body and body["fleet"]:
+        if body.get("fleet"):
             ships = ", ".join(f"{k}: {v}" for k, v in body["fleet"].items())
             self._log.write(f"  fleet: {ships}")
-        if "defenses" in body and body["defenses"]:
+        if body.get("defenses"):
             defs = ", ".join(f"{k}: {v}" for k, v in body["defenses"].items())
             self._log.write(f"  defenses: {defs}")
-        if "buildings" in body and body["buildings"]:
+        if body.get("buildings"):
             blds = ", ".join(f"{k}: L{v}" for k, v in body["buildings"].items() if v > 0)
             if blds:
                 self._log.write(f"  buildings: {blds}")
-        if "research" in body and body["research"]:
+        if body.get("research"):
             res = ", ".join(f"{k}: L{v}" for k, v in body["research"].items() if v > 0)
             if res:
                 self._log.write(f"  research: {res}")
@@ -1958,7 +2021,9 @@ class ReplScreen(Screen):
 
     def _render_combat_report(self, body: dict) -> None:
         winner = body.get("winner", "draw")
-        winner_style = "green" if winner == "attacker" else ("red" if winner == "defender" else "yellow")
+        winner_style = (
+            "green" if winner == "attacker" else ("red" if winner == "defender" else "yellow")
+        )
         self._log.write(
             f"[{winner_style}]{winner.upper()} WINS[/{winner_style}]  at {body['target_coord']}\n"
             f"  attacker [bold]{body['attacker']}[/bold] vs defender [bold]{body['defender']}[/bold]"
@@ -2002,10 +2067,14 @@ class ReplScreen(Screen):
 
         events = await self.app.client.planet_logs(pid, limit=limit)
         snap = self._snapshot
-        pname = f"{snap['name']} {snap['galaxy']}:{snap['system']}:{snap['position']}" if snap else f"planet {pid}"
+        pname = (
+            f"{snap['name']} {snap['galaxy']}:{snap['system']}:{snap['position']}"
+            if snap
+            else f"planet {pid}"
+        )
 
         header = Text()
-        header.append(f"━━━ recent activity on ", style="bold yellow")
+        header.append("━━━ recent activity on ", style="bold yellow")
         header.append(pname, style="bold yellow")
         header.append(f"  (last {len(events)}) ", style="dim")
         header.append("━" * 10, style="cyan")

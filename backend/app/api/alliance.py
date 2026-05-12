@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.deps import CurrentUser, DBSession
 from backend.app.models.alliance import Alliance, AllianceMember, AllianceRole
@@ -54,18 +55,21 @@ class AllianceDetail(AllianceRead):
     members: list[AllianceMemberRead] = []
 
 
-async def _row_to_read(db, a: Alliance) -> AllianceRead:
+async def _row_to_read(db: AsyncSession, a: Alliance) -> AllianceRead:
     count_res = await db.execute(
-        select(func.count()).select_from(AllianceMember)
-        .where(AllianceMember.alliance_id == a.id)
+        select(func.count()).select_from(AllianceMember).where(AllianceMember.alliance_id == a.id)
     )
     member_count = int(count_res.scalar() or 0)
     founder = await db.get(User, a.founder_id)
     return AllianceRead(
-        id=a.id, tag=a.tag, name=a.name, description=a.description,
+        id=a.id,
+        tag=a.tag,
+        name=a.name,
+        description=a.description,
         founder_id=a.founder_id,
         founder_username=founder.username if founder else "?",
-        member_count=member_count, created_at=a.created_at,
+        member_count=member_count,
+        created_at=a.created_at,
     )
 
 
@@ -79,37 +83,35 @@ async def list_alliances(_user: CurrentUser, db: DBSession) -> list[AllianceRead
 
 
 @router.post("/alliances", response_model=AllianceRead, status_code=status.HTTP_201_CREATED)
-async def create_alliance(
-    body: AllianceCreate, user: CurrentUser, db: DBSession
-) -> AllianceRead:
+async def create_alliance(body: AllianceCreate, user: CurrentUser, db: DBSession) -> AllianceRead:
     # User must not already be in an alliance
-    existing_m = await db.execute(
-        select(AllianceMember).where(AllianceMember.user_id == user.id)
-    )
+    existing_m = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user.id))
     if existing_m.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="leave your current alliance first")
 
     tag_upper = body.tag.upper()
     alliance = Alliance(
-        tag=tag_upper, name=body.name, description=body.description,
+        tag=tag_upper,
+        name=body.name,
+        description=body.description,
         founder_id=user.id,
     )
     db.add(alliance)
     try:
         await db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="tag or name already taken")
+        raise HTTPException(status_code=409, detail="tag or name already taken") from exc
 
-    db.add(AllianceMember(
-        alliance_id=alliance.id, user_id=user.id, role=AllianceRole.FOUNDER.value
-    ))
+    db.add(
+        AllianceMember(alliance_id=alliance.id, user_id=user.id, role=AllianceRole.FOUNDER.value)
+    )
     await db.commit()
     await db.refresh(alliance)
     return await _row_to_read(db, alliance)
 
 
-async def _alliance_by_tag(db, tag: str) -> Alliance:
+async def _alliance_by_tag(db: AsyncSession, tag: str) -> Alliance:
     res = await db.execute(select(Alliance).where(Alliance.tag == tag.upper()))
     a = res.scalar_one_or_none()
     if a is None:
@@ -129,8 +131,10 @@ async def get_alliance(tag: str, _user: CurrentUser, db: DBSession) -> AllianceD
     )
     members = [
         AllianceMemberRead(
-            user_id=m.user_id, username=u.username,
-            role=m.role, joined_at=m.joined_at,
+            user_id=m.user_id,
+            username=u.username,
+            role=m.role,
+            joined_at=m.joined_at,
         )
         for m, u in m_res.all()
     ]
@@ -139,16 +143,12 @@ async def get_alliance(tag: str, _user: CurrentUser, db: DBSession) -> AllianceD
 
 @router.post("/alliances/{tag}/join", response_model=AllianceRead)
 async def join_alliance(tag: str, user: CurrentUser, db: DBSession) -> AllianceRead:
-    existing_m = await db.execute(
-        select(AllianceMember).where(AllianceMember.user_id == user.id)
-    )
+    existing_m = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user.id))
     if existing_m.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="leave your current alliance first")
 
     a = await _alliance_by_tag(db, tag)
-    db.add(AllianceMember(
-        alliance_id=a.id, user_id=user.id, role=AllianceRole.MEMBER.value
-    ))
+    db.add(AllianceMember(alliance_id=a.id, user_id=user.id, role=AllianceRole.MEMBER.value))
     await db.commit()
     return await _row_to_read(db, a)
 
@@ -169,8 +169,7 @@ async def leave_alliance(tag: str, user: CurrentUser, db: DBSession) -> dict:
     # If founder leaves while others remain, disallow (founder must transfer
     # or dissolve first). MVP: if last member, alliance auto-deletes.
     count_res = await db.execute(
-        select(func.count()).select_from(AllianceMember)
-        .where(AllianceMember.alliance_id == a.id)
+        select(func.count()).select_from(AllianceMember).where(AllianceMember.alliance_id == a.id)
     )
     total_members = int(count_res.scalar() or 0)
     if member.role == AllianceRole.FOUNDER.value and total_members > 1:
@@ -188,9 +187,7 @@ async def leave_alliance(tag: str, user: CurrentUser, db: DBSession) -> dict:
 
 @router.get("/me/alliance", response_model=AllianceDetail | None)
 async def my_alliance(user: CurrentUser, db: DBSession) -> AllianceDetail | None:
-    m_res = await db.execute(
-        select(AllianceMember).where(AllianceMember.user_id == user.id)
-    )
+    m_res = await db.execute(select(AllianceMember).where(AllianceMember.user_id == user.id))
     member = m_res.scalar_one_or_none()
     if member is None:
         return None

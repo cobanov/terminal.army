@@ -22,4 +22,4 @@ class Building(Base):
     building_type: Mapped[str] = mapped_column(String(32), nullable=False)
     level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    planet: Mapped["Planet"] = relationship(back_populates="buildings")
+    planet: Mapped[Planet] = relationship(back_populates="buildings")
