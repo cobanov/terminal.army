@@ -1,4 +1,4 @@
-"""User options (theme, etc.) persisted to ~/.config/sakusen/options.json.
+"""User options (theme, etc.) persisted to ~/.config/tarmy/options.json.
 
 Separate from credentials.json so it can be checked into version control
 (without secrets) or shared across hosts.
@@ -10,17 +10,17 @@ import json
 from pathlib import Path
 from typing import Any
 
-DEFAULT_PATH = Path.home() / ".config" / "sakusen" / "options.json"
+DEFAULT_PATH = Path.home() / ".config" / "tarmy" / "options.json"
 
-DEFAULT_THEME = "sakusen-dark"
+DEFAULT_THEME = "tarmy-dark"
 
 # Friendly aliases that map to Textual's built-in theme names. Anything the
 # user types that doesn't appear here is passed through verbatim so any new
 # upstream theme works without a code change.
 THEME_ALIASES = {
     "darcula": "dracula",  # JetBrains Darcula → close match
-    "default": "sakusen-dark",
-    "sakusen": "sakusen-dark",
+    "default": "tarmy-dark",
+    "tarmy": "tarmy-dark",
     "dark": "textual-dark",
     "light": "textual-light",
 }

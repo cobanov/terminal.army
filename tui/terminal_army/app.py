@@ -1,4 +1,4 @@
-"""OGame TUI - tek-ekran slash-command REPL."""
+"""terminal.army TUI - tek-ekran slash-command REPL."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from terminal_army.screens.repl import ReplScreen
 # Our original look: deep black background, near-black panels, amber
 # accents. Registered with Textual's theme system so /options --theme
 # treats it like any other built-in.
-SAKUSEN_DARK = Theme(
-    name="sakusen-dark",
+TARMY_DARK = Theme(
+    name="tarmy-dark",
     primary="#fbbf24",
     secondary="#84cc16",
     accent="#fbbf24",
@@ -44,10 +44,10 @@ class TerminalArmyApp(App):
         self.me_info: dict | None = None
         # Register our default theme before applying any saved preference.
         # If the user has never run /options --theme this picks the
-        # sakusen palette; otherwise their saved name (built-in or ours)
-        # is restored.
+        # tarmy-dark palette; otherwise their saved name (built-in or
+        # ours) is restored.
         try:
-            self.register_theme(SAKUSEN_DARK)
+            self.register_theme(TARMY_DARK)
         except Exception:
             pass
         saved_theme = options.get_theme()

@@ -15,22 +15,17 @@ import httpx
 
 from terminal_army import credentials as creds
 
-DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "sakusen"
-LEGACY_DATA_DIR = Path.home() / ".local" / "share" / "ogame"
+DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "tarmy"
 
-# Default public deployment. End users don't have to configure anything —
-# `terminal-army` with no args connects here. Override with TA_BACKEND
-# (or legacy SAKUSEN_BACKEND / OGAME_BACKEND) or --remote for self-hosted shards.
+# Default public deployment. End users don't have to configure anything;
+# `tarmy` with no args connects here. Override with TA_BACKEND or --remote
+# for self-hosted shards.
 DEFAULT_BACKEND = "https://terminal.army"
 
 
 def _backend_env() -> str | None:
-    """Read backend URL from TA_BACKEND, falling back to legacy names."""
-    return (
-        os.environ.get("TA_BACKEND")
-        or os.environ.get("SAKUSEN_BACKEND")
-        or os.environ.get("OGAME_BACKEND")
-    )
+    """Read backend URL from TA_BACKEND."""
+    return os.environ.get("TA_BACKEND")
 
 
 ANSI_RESET = "\033[0m"
@@ -72,7 +67,7 @@ def _wait_for_health(url: str, timeout: float = 20.0) -> bool:
 
 def _spawn_local_backend(port: int, data_dir: Path) -> tuple[subprocess.Popen, Path]:
     data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = data_dir / "ogame.db"
+    db_path = data_dir / "tarmy.db"
     log_path = data_dir / "server.log"
 
     env = os.environ.copy()
@@ -141,7 +136,10 @@ def _device_auth_flow(backend_url: str) -> str | None:
     url = f"{backend_url}/login?code={code}"
 
     print(file=sys.stderr)
-    print(_color("┌─ sakusen · sign in ", ANSI_BOLD) + _color("─" * 39, ANSI_DIM), file=sys.stderr)
+    print(
+        _color("┌─ terminal.army · sign in ", ANSI_BOLD) + _color("─" * 33, ANSI_DIM),
+        file=sys.stderr,
+    )
     print(_color("│", ANSI_DIM), file=sys.stderr)
     print(_color("│ ", ANSI_DIM) + "Open this URL in your browser:", file=sys.stderr)
     print(_color("│   ", ANSI_DIM) + _color(url, ANSI_CYAN), file=sys.stderr)
@@ -233,8 +231,8 @@ def _self_uninstall() -> int:
 
     Steps:
       1. Show what will be deleted and prompt for confirmation.
-      2. Delete credential dirs (~/.config/sakusen + legacy ~/.config/ogame).
-      3. Delete solo data dirs (~/.local/share/sakusen + legacy ~/.local/share/ogame).
+      2. Delete the credential dir (~/.config/tarmy).
+      3. Delete the solo data dir (~/.local/share/tarmy).
       4. Run `uv tool uninstall terminal-army` to remove the binaries.
 
     Each step is best-effort. If `uv` isn't on PATH we still wipe the user
@@ -243,12 +241,10 @@ def _self_uninstall() -> int:
     import shutil
     import subprocess
 
-    # Everything we know about that tarmy may have created on disk.
+    # Everything tarmy may have created on disk.
     data_paths = [
-        Path.home() / ".config" / "sakusen",
-        Path.home() / ".config" / "ogame",
-        Path.home() / ".local" / "share" / "sakusen",
-        Path.home() / ".local" / "share" / "ogame",
+        Path.home() / ".config" / "tarmy",
+        Path.home() / ".local" / "share" / "tarmy",
     ]
     existing = [p for p in data_paths if p.exists()]
 
@@ -363,9 +359,8 @@ def main() -> None:
         prog="tarmy",
         description="terminal.army — multiplayer space strategy from your terminal",
         epilog=(
-            "Default: connects to $TA_BACKEND (or legacy $SAKUSEN_BACKEND / "
-            "$OGAME_BACKEND), falling back to https://terminal.army. "
-            "Solo offline: tarmy --solo."
+            "Default: connects to $TA_BACKEND, falling back to "
+            "https://terminal.army. Solo offline: tarmy --solo."
         ),
     )
     parser.add_argument(
@@ -406,8 +401,8 @@ def main() -> None:
     if args.uninstall:
         sys.exit(_self_uninstall())
 
-    # Resolution order: --remote, then SAKUSEN_BACKEND env, then the public
-    # default. --solo overrides everything to spin up a local sqlite backend.
+    # Resolution order: --remote, then $TA_BACKEND, then the public default.
+    # --solo overrides everything to spin up a local sqlite backend.
     remote = args.remote or (None if args.solo else (_backend_env() or DEFAULT_BACKEND))
 
     if args.solo:
@@ -454,9 +449,9 @@ def main() -> None:
 
 
 def server_main() -> None:
-    """sakusen-server console script: backend only (multiplayer host)."""
+    """tarmy-server console script: backend only (multiplayer host)."""
     parser = argparse.ArgumentParser(
-        prog="sakusen-server",
+        prog="tarmy-server",
         description="terminal.army backend (multiplayer host)",
     )
     parser.add_argument("--host", default="0.0.0.0")
@@ -472,7 +467,7 @@ def server_main() -> None:
     if "DATABASE_URL" not in os.environ:
         data_dir = Path(args.data_dir).expanduser()
         data_dir.mkdir(parents=True, exist_ok=True)
-        os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{data_dir / 'ogame.db'}"
+        os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{data_dir / 'tarmy.db'}"
 
     import uvicorn
 

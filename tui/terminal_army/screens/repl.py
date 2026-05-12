@@ -1,4 +1,4 @@
-"""Sakusen dashboard screen (slash-command REPL)."""
+"""terminal.army dashboard screen (slash-command REPL)."""
 
 from __future__ import annotations
 
@@ -337,7 +337,7 @@ def suggestions_for(
             stripped = arg.split()
             if stripped and stripped[0] in ("--theme", "--t"):
                 themes = [
-                    "sakusen-dark",
+                    "tarmy-dark",
                     "textual-dark",
                     "textual-light",
                     "nord",
