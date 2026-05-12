@@ -225,6 +225,51 @@ def _get_or_acquire_credentials(backend_url: str) -> str:
 
 
 _GIT_INSTALL_URL = "git+https://github.com/cobanov/space-galactic-tui.git"
+_PACKAGE_NAME = "terminal-army"
+
+
+def _self_uninstall() -> int:
+    """Remove the CLI via `uv tool uninstall`.
+
+    Mirrors --update: assumes the user installed with `uv tool install`,
+    which is what every install path in the README points at. The local
+    credential cache (~/.config/tarmy or legacy ~/.local/share/sakusen)
+    is left alone on purpose so re-installing keeps you signed in.
+    """
+    import shutil
+    import subprocess
+
+    uv = shutil.which("uv")
+    if uv is None:
+        print(
+            _color(
+                "uv is not on PATH. Nothing to do here; if you installed via\n"
+                "a different method, remove the `tarmy` and `tarmy-server`\n"
+                "binaries manually.",
+                ANSI_RED,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    cmd = [uv, "tool", "uninstall", _PACKAGE_NAME]
+    print(_color(f"removing {_PACKAGE_NAME} via uv tool uninstall", ANSI_CYAN), file=sys.stderr)
+    try:
+        rc = subprocess.call(cmd)
+    except OSError as exc:
+        print(_color(f"uv failed: {exc}", ANSI_RED), file=sys.stderr)
+        return 1
+    if rc != 0:
+        print(_color(f"uninstall failed (uv exited {rc})", ANSI_RED), file=sys.stderr)
+        return rc
+    print(
+        _color(
+            "✓ uninstalled. Saved login keys were left in place;\n"
+            "  delete ~/.config/tarmy by hand if you want a clean slate.",
+            ANSI_GREEN,
+        ),
+        file=sys.stderr,
+    )
+    return 0
 
 
 def _self_update() -> int:
@@ -309,10 +354,17 @@ def main() -> None:
         action="store_true",
         help="Re-install the CLI from the public github URL and exit.",
     )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove the CLI via `uv tool uninstall` and exit.",
+    )
     args = parser.parse_args()
 
     if args.update:
         sys.exit(_self_update())
+    if args.uninstall:
+        sys.exit(_self_uninstall())
 
     # Resolution order: --remote, then SAKUSEN_BACKEND env, then the public
     # default. --solo overrides everything to spin up a local sqlite backend.

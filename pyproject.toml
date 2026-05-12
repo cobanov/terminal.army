@@ -44,17 +44,10 @@ dev = [
 ]
 
 [project.scripts]
-# Primary short name — what install instructions point at.
+# Short, primary name. Anything else (terminal-army, sakusen, ogame)
+# was retired so a fresh install ships only these two binaries.
 tarmy = "terminal_army.cli:main"
 tarmy-server = "terminal_army.cli:server_main"
-# Longer name kept available too.
-terminal-army = "terminal_army.cli:main"
-terminal-army-server = "terminal_army.cli:server_main"
-# Backwards-compat aliases — keep so existing installs don't break.
-sakusen = "terminal_army.cli:main"
-sakusen-server = "terminal_army.cli:server_main"
-ogame = "terminal_army.cli:main"
-ogame-server = "terminal_army.cli:server_main"
 
 [project.urls]
 Repository = "https://github.com/cobanov/space-galactic-tui"
