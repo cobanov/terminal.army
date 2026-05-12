@@ -1,7 +1,7 @@
 [project]
-name = "sakusen"
+name = "terminal-army"
 version = "0.1.0"
-description = "sakusen — terminal-native multiplayer space strategy"
+description = "terminal.army — multiplayer space strategy from your terminal"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
@@ -44,9 +44,11 @@ dev = [
 ]
 
 [project.scripts]
+terminal-army = "ogame_tui.cli:main"
+terminal-army-server = "ogame_tui.cli:server_main"
+# Backwards-compat aliases — keep so existing installs don't break.
 sakusen = "ogame_tui.cli:main"
 sakusen-server = "ogame_tui.cli:server_main"
-# Legacy aliases (will be removed after the next public release):
 ogame = "ogame_tui.cli:main"
 ogame-server = "ogame_tui.cli:server_main"
 

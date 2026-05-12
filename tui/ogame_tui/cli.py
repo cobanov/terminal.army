@@ -1,4 +1,4 @@
-"""Sakusen CLI: solo + remote + server modes, signup URL + key prompt."""
+"""terminal.army CLI: solo + remote + server modes, signup URL + key prompt."""
 
 from __future__ import annotations
 
@@ -19,14 +19,18 @@ DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "sakusen"
 LEGACY_DATA_DIR = Path.home() / ".local" / "share" / "ogame"
 
 # Default public deployment. End users don't have to configure anything —
-# `sakusen` with no args connects here. Override with SAKUSEN_BACKEND or
-# --remote for self-hosted shards.
-DEFAULT_BACKEND = "https://sakusen.space"
+# `terminal-army` with no args connects here. Override with TA_BACKEND
+# (or legacy SAKUSEN_BACKEND / OGAME_BACKEND) or --remote for self-hosted shards.
+DEFAULT_BACKEND = "https://terminal.army"
 
 
 def _backend_env() -> str | None:
-    """Read backend URL from SAKUSEN_BACKEND, falling back to legacy OGAME_BACKEND."""
-    return os.environ.get("SAKUSEN_BACKEND") or os.environ.get("OGAME_BACKEND")
+    """Read backend URL from TA_BACKEND, falling back to legacy names."""
+    return (
+        os.environ.get("TA_BACKEND")
+        or os.environ.get("SAKUSEN_BACKEND")
+        or os.environ.get("OGAME_BACKEND")
+    )
 
 
 ANSI_RESET = "\033[0m"
@@ -223,7 +227,7 @@ def _get_or_acquire_credentials(backend_url: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="sakusen",
-        description="sakusen — terminal-native multiplayer space strategy",
+        description="terminal.army — multiplayer space strategy from your terminal",
         epilog=(
             "Default: connects to $SAKUSEN_BACKEND (or legacy $OGAME_BACKEND), "
             "otherwise starts solo mode. "
@@ -304,7 +308,7 @@ def server_main() -> None:
     """sakusen-server console script: backend only (multiplayer host)."""
     parser = argparse.ArgumentParser(
         prog="sakusen-server",
-        description="sakusen backend (multiplayer host)",
+        description="terminal.army backend (multiplayer host)",
     )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import random
 import shlex
+import textwrap
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import monotonic
@@ -147,9 +148,9 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/inbox", "/inbox [user]", "conversations (or chat with user)"),
     CommandSpec("/logs", "/logs [N]", "recent activity on this planet"),
     CommandSpec("/ships", "/ships", "ships in shipyard + buildable"),
-    CommandSpec("/build ", "/build <ship> <n>", "build N ships in shipyard"),
+    CommandSpec("/ships build ", "/ships build <type> <n>", "build N ships at shipyard"),
     CommandSpec("/defense", "/defense", "planetary defenses + buildable"),
-    CommandSpec("/defend ", "/defend <type> <n>", "build N defenses on planet"),
+    CommandSpec("/defense build ", "/defense build <type> <n>", "build N defenses"),
     CommandSpec("/fleets", "/fleets", "active fleet movements"),
     CommandSpec("/send", "/send", "fleet send wizard (see /help)"),
     CommandSpec("/espionage ", "/espionage <g>:<s>:<p>", "send probes to target"),
@@ -157,15 +158,7 @@ COMMANDS: list[CommandSpec] = [
     CommandSpec("/transport ", "/transport <g>:<s>:<p>", "transport resources"),
     CommandSpec("/reports", "/reports [id]", "list reports or open one"),
     CommandSpec("/leaderboard", "/leaderboard", "server rankings"),
-    CommandSpec("/alliances", "/alliances", "list alliances"),
-    CommandSpec(
-        "/alliance",
-        "/alliance [tag|--flag]",
-        "show alliance; flags: --requests --approve <u> --reject <u> --withdraw",
-    ),
-    CommandSpec("/found ", "/found <tag> <name>", "found a new alliance"),
-    CommandSpec("/join ", "/join <tag> [msg]", "apply to join an alliance"),
-    CommandSpec("/leave", "/leave", "leave your alliance"),
+    CommandSpec("/alliance", "/alliance", "list your alliance members (manage on web)"),
     CommandSpec("/me", "/me", "show my account"),
     CommandSpec("/quest", "/quest", "onboarding quest list with progress"),
     CommandSpec(
@@ -185,7 +178,7 @@ COMMANDS: list[CommandSpec] = [
 ]
 
 
-HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
+HELP_TEXT = """[bold yellow]terminal.army · commands[/bold yellow]
 
 [bold]gameplay[/bold]
   /planets                list my planets
@@ -212,10 +205,10 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]fleet & combat[/bold]
   /ships                  list ships in shipyard + buildable types
-  /build <ship> <count>   construct ships in the shipyard
-  /upgrade <building>     upgrade a resource or facility building
+  /ships build <ship> <count>     construct ships in the shipyard
+  /upgrade <building>             upgrade a resource or facility building
 /defense                planetary defenses + buildable structures
-/defend <type> <n>      build N defenses (e.g. /defend rocket_launcher 20)
+  /defense build <type> <n>       build N defenses (e.g. /defense build rocket_launcher 20)
   /fleets                 active fleet movements
   /espionage <g>:<s>:<p>  send espionage probe to target
   /attack <g>:<s>:<p> <ship>:<n> ...   attack a target
@@ -226,16 +219,7 @@ HELP_TEXT = """[bold yellow]sakusen · commands[/bold yellow]
 
 [bold]standings[/bold]
   /leaderboard            server rankings (or /rank, /lb)
-  /alliances              list all alliances
-  /alliance               your alliance detail
-  /alliance <tag>         alliance detail by tag
-  /found <tag> <name>     found a new alliance (tag 2-6 chars)
-  /join <tag> [message]   apply to join — the founder must approve
-  /leave                  leave your alliance (founder must dissolve)
-  /alliance --requests    founder: list pending applicants; else: your own
-  /alliance --approve <u> founder: approve a join request
-  /alliance --reject <u>  founder: reject a join request
-  /alliance --withdraw    withdraw your own pending join request
+  /alliance               your alliance roster (management lives on the web)
 
 [bold]system[/bold]
   /me                     my account info
@@ -305,23 +289,41 @@ def suggestions_for(
 
             keys = _enc.suggestions(arg_l, limit=20) if arg_l else list(_enc.ALL.keys())[:20]
             return [(f"/info {k}", _make_label(f"/info {k}", _enc.ALL[k].category)) for k in keys]
-        if cmd_l in ("/build", "/bs"):
-            # Ships only. Buildings live under /upgrade.
-            if " " in arg:
-                return []
-            return [
-                (f"/build {k} ", _make_label(f"/build {k} <count>", "build ship"))
-                for k in _SHIP_KEYS
-                if k.startswith(arg_l)
-            ]
-        if cmd_l in ("/defend", "/dfd"):
-            if " " in arg:
-                return []
-            return [
-                (f"/defend {k} ", _make_label(f"/defend {k} <count>", "build defense"))
-                for k in _DEFENSE_KEYS
-                if k.startswith(arg_l)
-            ]
+        if cmd_l == "/ships":
+            # /ships → no further suggestion. /ships build <type>.
+            if arg_l == "":
+                return [
+                    ("/ships build ", _make_label("/ships build <ship>", "build ships")),
+                ]
+            tokens = arg.split()
+            if tokens[0].lower() == "build":
+                # /ships build <prefix>
+                ship_arg = tokens[1] if len(tokens) > 1 else ""
+                ship_l = ship_arg.lower()
+                return [
+                    (f"/ships build {k} ", _make_label(f"/ships build {k} <count>", "build ship"))
+                    for k in _SHIP_KEYS
+                    if k.startswith(ship_l)
+                ]
+            return []
+        if cmd_l == "/defense":
+            if arg_l == "":
+                return [
+                    ("/defense build ", _make_label("/defense build <type>", "build defenses")),
+                ]
+            tokens = arg.split()
+            if tokens[0].lower() == "build":
+                def_arg = tokens[1] if len(tokens) > 1 else ""
+                def_l = def_arg.lower()
+                return [
+                    (
+                        f"/defense build {k} ",
+                        _make_label(f"/defense build {k} <count>", "build defense"),
+                    )
+                    for k in _DEFENSE_KEYS
+                    if k.startswith(def_l)
+                ]
+            return []
         if cmd_l == "/send":
             if " " in arg:
                 return []
@@ -734,9 +736,7 @@ def _nav_text() -> Text:
             "cyan",
             [
                 "/ships",
-                "/build",
                 "/defense",
-                "/defend",
                 "/fleets",
                 "/espionage",
                 "/attack",
@@ -746,7 +746,7 @@ def _nav_text() -> Text:
         ),
         ("GALAXY", "blue", ["/galaxy", "/planets", "/switch", "/logs"]),
         ("SOCIAL", "yellow", ["/msg", "/inbox"]),
-        ("STANDINGS", "yellow", ["/leaderboard", "/alliances", "/alliance"]),
+        ("STANDINGS", "yellow", ["/leaderboard", "/alliance"]),
         ("HELP", "dim", ["/help", "/quest", "/info", "/options"]),
     ]
     t = Text()
@@ -855,6 +855,98 @@ class FleetSelectorScreen(ModalScreen[dict[str, int] | None]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+
+# ---------- Galaxy browser modal -----------------------------------------
+class GalaxyScreen(ModalScreen[None]):
+    """Browse galaxy slots with arrow-key nav.
+
+    ← / →   prev / next system (wraps 1..499)
+    ↑ / ↓   prev / next galaxy (wraps 1..9)
+    esc     close
+    """
+
+    DEFAULT_CSS = """
+    GalaxyScreen {
+        align: center middle;
+    }
+    #galaxy-modal {
+        width: 70;
+        height: auto;
+        max-height: 90%;
+        background: $surface;
+        border: heavy $accent;
+        padding: 1 2;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "close", "close", priority=True),
+        Binding("left,h", "prev_sys", "prev system", priority=True),
+        Binding("right,l", "next_sys", "next system", priority=True),
+        Binding("up,k", "prev_gal", "prev galaxy", priority=True),
+        Binding("down,j", "next_gal", "next galaxy", priority=True),
+    ]
+
+    def __init__(self, client, universe_id: int, galaxy: int, system: int) -> None:
+        super().__init__()
+        self._client = client
+        self._uid = universe_id
+        self._g = max(1, galaxy)
+        self._s = max(1, system)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="galaxy-modal"):
+            yield Static("[dim]loading...[/dim]", id="galaxy-body")
+
+    async def on_mount(self) -> None:
+        await self._refresh()
+
+    async def _refresh(self) -> None:
+        body = self.query_one("#galaxy-body", Static)
+        try:
+            data = await self._client.view_galaxy(self._uid, self._g, self._s)
+        except APIError as exc:
+            body.update(f"[red]{exc.detail}[/red]")
+            return
+        t = Table(
+            show_header=True,
+            header_style="bold yellow",
+            box=None,
+            title=f"galaxy {self._g}:{self._s}    [dim]← → systems · ↑ ↓ galaxies · esc[/dim]",
+        )
+        t.add_column("pos", justify="right", style="cyan")
+        t.add_column("planet")
+        t.add_column("owner")
+        for slot in data["slots"]:
+            name = slot["planet_name"] or "-"
+            owner = slot["owner_username"] or "-"
+            name_style = "bold" if slot["planet_name"] else "dim"
+            t.add_row(
+                str(slot["position"]),
+                Text(name, style=name_style),
+                Text(owner, style="dim" if not slot["owner_username"] else ""),
+            )
+        body.update(t)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    async def action_prev_sys(self) -> None:
+        self._s = 499 if self._s <= 1 else self._s - 1
+        await self._refresh()
+
+    async def action_next_sys(self) -> None:
+        self._s = 1 if self._s >= 499 else self._s + 1
+        await self._refresh()
+
+    async def action_prev_gal(self) -> None:
+        self._g = 9 if self._g <= 1 else self._g - 1
+        await self._refresh()
+
+    async def action_next_gal(self) -> None:
+        self._g = 1 if self._g >= 9 else self._g + 1
+        await self._refresh()
 
 
 # ---------- Screen --------------------------------------------------------
@@ -969,6 +1061,7 @@ class ReplScreen(Screen):
         self._queue_cache: list[dict[str, Any]] = []
         self._unread_count: int = 0
         self._online_count: int = 0
+        self._defense_points: int = 0
         self._fleets_cache: list[dict[str, Any]] = []
         self._incoming_cache: list[dict[str, Any]] = []
         self._quest_cache: dict[str, Any] | None = None
@@ -1026,7 +1119,7 @@ class ReplScreen(Screen):
         self._input = self.query_one("#prompt", Input)
         self._suggestions = self.query_one("#suggestions", OptionList)
 
-        self._log.write("[bold yellow]sakusen[/bold yellow]")
+        self._log.write("[bold yellow]terminal.army[/bold yellow]")
         self._log.write("[dim]Type / to see commands, Tab to autocomplete, Enter to run.[/dim]")
         self._log.write("")
 
@@ -1075,6 +1168,11 @@ class ReplScreen(Screen):
         try:
             stats = await self.app.client.stats()
             self._online_count = int(stats.get("online", 0))
+        except APIError:
+            pass
+        try:
+            pts = await self.app.client.my_points()
+            self._defense_points = int(pts.get("defense_points", 0))
         except APIError:
             pass
         try:
@@ -1177,15 +1275,18 @@ class ReplScreen(Screen):
         left.append_text(line2)
         self._top_left.update(left)
 
-        # --- RIGHT: clock + online count on line 1, unread on line 2
+        # --- RIGHT: clock + online + my defense pts on line 1, unread on line 2
         right = Text()
         right.append(_now_local_hhmmss(), style="bold green")
         right.append("  ")
         right.append("● ", style="bold green")
         right.append(f"{self._online_count} online", style="dim")
+        right.append("  ")
+        right.append("🛡 ", style="bold yellow")
+        right.append(f"{_fmt_int(self._defense_points)} def", style="dim")
         right.append("\n")
         if self._unread_count > 0:
-            right.append(f"✉ {self._unread_count} unread", style="bold magenta")
+            right.append(f"✉ {self._unread_count} unread", style="bold red")
         else:
             right.append("✉ inbox", style="dim")
         self._top_right.update(right)
@@ -1356,8 +1457,16 @@ class ReplScreen(Screen):
             if cur is None:
                 body.append("  all complete ✓\n", style="dim")
             else:
-                body.append("  ▸ ", style="bold yellow")
-                body.append(f"{cur['title']}\n")
+                # Wrap manually so continuation lines align under the
+                # title text (4 spaces, matching the "  ▸ " prefix width)
+                # instead of falling back to column 0.
+                lines = textwrap.wrap(cur["title"], width=28) or [cur["title"]]
+                for i, line in enumerate(lines):
+                    if i == 0:
+                        body.append("  ▸ ", style="bold yellow")
+                    else:
+                        body.append("    ")
+                    body.append(line + "\n")
 
         # === 5) MESSAGES ===
         body.append("\nMESSAGES ", style="bold yellow")
@@ -1551,10 +1660,8 @@ class ReplScreen(Screen):
             "activity": "logs",
             "sh": "ships",
             "shp": "ships",
-            "bs": "build",
             "def": "defense",
             "defs": "defense",
-            "dfd": "defend",
             "f": "fleets",
             "fl": "fleets",
             "esp": "espionage",
@@ -1567,7 +1674,6 @@ class ReplScreen(Screen):
             "rank": "leaderboard",
             "ranking": "leaderboard",
             "ally": "alliance",
-            "all": "alliances",
         }
         cmd = aliases.get(cmd, cmd)
 
@@ -1820,35 +1926,77 @@ class ReplScreen(Screen):
         if pid is None:
             return
         p = await self.app.client.get_planet(pid)
+
+        header = Text()
+        header.append(p.get("code", "—"), style="dim")
+        header.append("#", style="dim")
+        header.append(f"{p['name']}", style="bold yellow")
+        header.append(f"   {p['galaxy']}:{p['system']}:{p['position']}", style="bold yellow")
+        header.append(f"   id #{p['id']}", style="dim")
+        self._log.write(header)
+
+        # Identity / habitat
         t = Table(show_header=False, box=None, padding=(0, 2))
-        t.add_column(style="cyan", justify="right")
+        t.add_column(style="dim", justify="right")
         t.add_column()
-        t.add_row("name", p["name"])
-        t.add_row("coord", f"{p['galaxy']}:{p['system']}:{p['position']}")
-        t.add_row("temp", f"{p['temp_min']} / {p['temp_max']} °C")
-        t.add_row("fields", f"{p['fields_used']} / {p['fields_total']}")
         t.add_row(
-            "resources",
-            f"M [yellow]{_fmt_int(p['resources_metal'])}[/yellow] "
-            f"C [cyan]{_fmt_int(p['resources_crystal'])}[/cyan] "
-            f"D [magenta]{_fmt_int(p['resources_deuterium'])}[/magenta]",
+            "fields",
+            f"{p['fields_used']} / {p['fields_total']} "
+            f"({p['fields_total'] - p['fields_used']} free)",
         )
+        t.add_row("temperature", f"{p['temp_min']} / {p['temp_max']} °C")
+        created = str(p.get("created_at", ""))[:10]
+        if created:
+            t.add_row("founded", created)
+        self._log.write(t)
+
+        # Resources + projected hourly production
         prod = p["production"]
-        t.add_row(
-            "rate/h",
-            f"M {prod['metal_per_hour']:.1f}  "
-            f"C {prod['crystal_per_hour']:.1f}  "
-            f"D {prod['deuterium_per_hour']:.1f}",
-        )
+        rt = Table(show_header=True, header_style="bold yellow", box=None, padding=(0, 2))
+        rt.add_column("resource")
+        rt.add_column("stockpile", justify="right")
+        rt.add_column("+/h", justify="right")
+        rt.add_column("/day", justify="right")
+        for label, key, perh in (
+            ("metal", "resources_metal", prod["metal_per_hour"]),
+            ("crystal", "resources_crystal", prod["crystal_per_hour"]),
+            ("deuterium", "resources_deuterium", prod["deuterium_per_hour"]),
+        ):
+            rt.add_row(
+                label,
+                _fmt_int(p[key]),
+                f"+{perh:.0f}",
+                _fmt_int(perh * 24),
+            )
+        self._log.write(rt)
+
+        # Energy + status
         en = p["energy"]
         bal_color = "green" if en["balance"] >= 0 else "red"
-        t.add_row(
-            "energy",
-            f"prod {en['produced']}  used {en['consumed']}  "
-            f"bal [{bal_color}]{en['balance']:+d}[/{bal_color}]  "
-            f"factor {en['production_factor']:.2f}",
-        )
-        self._log.write(t)
+        line = Text()
+        line.append("energy   ", style="dim")
+        line.append(f"prod {en['produced']}  used {en['consumed']}  ")
+        line.append(f"bal {en['balance']:+d}", style=bal_color)
+        line.append(f"  factor {en['production_factor']:.2f}x", style="dim")
+        if en["production_factor"] < 1.0:
+            line.append(
+                f"  ⚠ mines throttled to {en['production_factor'] * 100:.0f}%",
+                style="bold red",
+            )
+        self._log.write(line)
+
+        # Build queue + my fleets summary
+        qsize = len([q for q in self._queue_cache])
+        fcount = len(self._fleets_cache)
+        icount = len(self._incoming_cache)
+        summary = Text()
+        summary.append("queue ", style="dim")
+        summary.append(f"{qsize}/5", style="" if qsize else "dim")
+        summary.append("   fleets ", style="dim")
+        summary.append(f"{fcount} out", style="" if fcount else "dim")
+        if icount:
+            summary.append(f"   ⚠ {icount} incoming", style="bold red")
+        self._log.write(summary)
 
     async def _render_buildings(self, title: str, keys: list[str] | None = None) -> None:
         pid = self._require_planet()
@@ -1878,15 +2026,15 @@ class ReplScreen(Screen):
         for b in rows:
             cm, cc, cd = b["next_cost_metal"], b["next_cost_crystal"], b["next_cost_deuterium"]
             affordable = cur_m >= cm and cur_c >= cc and cur_d >= cd
-            style = "" if affordable else "dim"
+            row_style = "" if affordable else "dim"
             name_style = "bold" if affordable else "dim"
             t.add_row(
                 Text(b["building_type"], style=name_style),
-                Text(str(b["level"]), style=style or "cyan"),
-                Text(_fmt_int(cm), style=style or ("yellow" if cur_m >= cm else "red")),
-                Text(_fmt_int(cc), style=style or ("cyan" if cur_c >= cc else "red")),
-                Text(_fmt_int(cd), style=style or ("magenta" if cur_d >= cd else "red")),
-                Text(_fmt_seconds(b["next_build_seconds"]), style=style or ""),
+                Text(str(b["level"]), style=row_style),
+                Text(_fmt_int(cm), style=row_style),
+                Text(_fmt_int(cc), style=row_style),
+                Text(_fmt_int(cd), style=row_style),
+                Text(_fmt_seconds(b["next_build_seconds"]), style=row_style),
             )
         self._log.write(t)
 
@@ -1939,19 +2087,21 @@ class ReplScreen(Screen):
             ok_prereq = r["prereq_met"]
             ok_cost = cur_m >= cm and cur_c >= cc and cur_d >= cd
             available = ok_prereq and ok_cost
-            base_style = "" if available else "dim"
+            # Plain text when affordable, dim when not. Only status carries
+            # a real color (green / red / yellow).
+            row_style = "" if available else "dim"
             if not ok_prereq:
-                status = Text("locked: " + ", ".join(r["prereq_missing"])[:40], style="red")
+                status = Text("locked: " + ", ".join(r["prereq_missing"])[:40], style="bold red")
             elif not ok_cost:
                 status = Text("need resources", style="yellow")
             else:
                 status = Text("ready", style="green")
             t.add_row(
                 Text(r["tech_type"], style="bold" if available else "dim"),
-                Text(str(r["level"]), style=base_style or "cyan"),
-                Text(_fmt_int(cm), style=base_style or "yellow"),
-                Text(_fmt_int(cc), style=base_style or "cyan"),
-                Text(_fmt_int(cd), style=base_style or "magenta"),
+                Text(str(r["level"]), style=row_style),
+                Text(_fmt_int(cm), style=row_style),
+                Text(_fmt_int(cc), style=row_style),
+                Text(_fmt_int(cd), style=row_style),
                 status,
             )
         self._log.write(t)
@@ -2037,27 +2187,26 @@ class ReplScreen(Screen):
         )
 
     async def _cmd_galaxy(self, args: list[str]) -> None:
-        if not args:
-            self._log.write("[red]usage:[/red] /galaxy <galaxy>:<system>  (e.g. /galaxy 4:28)")
-            return
-        try:
-            galaxy_str, system_str = args[0].split(":")
-            g = int(galaxy_str)
-            s = int(system_str)
-        except ValueError:
-            self._log.write("[red]format error:[/red] /galaxy 4:28")
-            return
+        """Open the galaxy browser. With no args, jumps to your current
+        planet's coords. With <g>:<s>, opens at that location. Inside
+        the browser, arrow keys page through systems / galaxies."""
         uid = self.app.current_universe_id
-        data = await self.app.client.view_galaxy(uid, g, s)
-        t = Table(show_header=True, header_style="bold yellow", box=None, title=f"galaxy {g}:{s}")
-        t.add_column("pos", justify="right", style="cyan")
-        t.add_column("planet")
-        t.add_column("owner")
-        for slot in data["slots"]:
-            name = slot["planet_name"] or "[dim]-[/dim]"
-            owner = slot["owner_username"] or "[dim]-[/dim]"
-            t.add_row(str(slot["position"]), name, owner)
-        self._log.write(t)
+        if uid is None:
+            self._log.write("[red]no universe[/red]")
+            return
+        # Default coords: current planet's galaxy + system.
+        snap = self._snapshot or {}
+        g = int(snap.get("galaxy") or 1)
+        s = int(snap.get("system") or 1)
+        if args:
+            try:
+                galaxy_str, system_str = args[0].split(":")
+                g = int(galaxy_str)
+                s = int(system_str)
+            except ValueError:
+                self._log.write("[red]format error:[/red] /galaxy 4:28")
+                return
+        await self.app.push_screen(GalaxyScreen(self.app.client, uid, g, s))
 
     async def _cmd_queue(self, args: list[str]) -> None:
         pid = self._require_planet()
@@ -2156,170 +2305,30 @@ class ReplScreen(Screen):
                 f"[dim]({_fmt_int(my_total)} pts)[/dim]"
             )
 
-    async def _cmd_alliances(self, args: list[str]) -> None:
-        rows = await self.app.client.list_alliances()
-        my = await self.app.client.my_alliance()
-        my_tag = my["tag"] if my else None
-        if not rows:
-            self._log.write(
-                "[dim]no alliances yet — found one with[/dim] [yellow]/found <tag> <name>[/yellow]"
-            )
-            return
-        t = Table(show_header=True, header_style="bold yellow", box=None)
-        t.add_column("tag", style="bold yellow")
-        t.add_column("name")
-        t.add_column("members", justify="right")
-        t.add_column("founder", style="dim")
-        for r in rows:
-            tag = f"[{r['tag']}]"
-            if r["tag"] == my_tag:
-                tag = f"[bold green]{tag}[/bold green]"
-            t.add_row(tag, r["name"], str(r["member_count"]), r["founder_username"])
-        self._log.write(t)
-        if my_tag:
-            self._log.write(f"[dim]you are in[/dim] [bold yellow][{my_tag}][/bold yellow]")
-        else:
-            self._log.write(
-                "[dim]join one with[/dim] [yellow]/join <tag>[/yellow] "
-                "[dim]or found yours with[/dim] [yellow]/found <tag> <name>[/yellow]"
-            )
-
     async def _cmd_alliance(self, args: list[str]) -> None:
-        """Umbrella for everything that operates on YOUR alliance.
-
-        Forms:
-          /alliance                          show your alliance
-          /alliance <TAG>                    show another alliance
-          /alliance --requests               founder: list pending; or your own
-          /alliance --approve <user>         founder: approve a request
-          /alliance --reject <user>          founder: reject a request
-          /alliance --withdraw               cancel your own pending request
-        """
-        # Flag mode: anything starting with "--" routes to a subcommand
-        # acting on the user's own alliance.
-        flag = next((a for a in args if a.startswith("--")), None)
-        if flag is not None:
-            tail = [a for a in args if not a.startswith("--")]
-            return await self._alliance_flag(flag, tail)
-
-        if not args:
-            my = await self.app.client.my_alliance()
-            if my is None:
-                self._log.write(
-                    "[dim]you are not in any alliance.[/dim] "
-                    "[yellow]/alliances[/yellow] [dim]to browse[/dim]"
-                )
-                return
-            await self._render_alliance(my)
-            return
-        tag = args[0].upper()
-        try:
-            data = await self.app.client.get_alliance(tag)
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        await self._render_alliance(data)
-
-    async def _alliance_flag(self, flag: str, tail: list[str]) -> None:
-        flag = flag.lower()
-        if flag in ("--requests", "--reqs", "--r"):
-            return await self._alliance_requests()
-        if flag in ("--approve", "--app", "--a"):
-            return await self._alliance_decide(tail, approve=True)
-        if flag in ("--reject", "--rej"):
-            return await self._alliance_decide(tail, approve=False)
-        if flag in ("--withdraw", "--w"):
-            return await self._alliance_withdraw()
-        self._log.write(
-            f"[red]unknown flag:[/red] {flag}  "
-            "[dim]known:[/dim] [yellow]--requests --approve <user> "
-            "--reject <user> --withdraw[/yellow]"
-        )
-
-    async def _alliance_requests(self) -> None:
+        """List the people in your own alliance. Management (creating,
+        joining, leaving, approving/rejecting requests) happens on the
+        web — this command is a read-only roster."""
         my = await self.app.client.my_alliance()
-        if my is not None and my["founder_id"] == await self._me_user_id():
-            try:
-                items = await self.app.client.list_alliance_requests(my["tag"])
-            except APIError as exc:
-                self._log.write(f"[red]{exc.detail}[/red]")
-                return
-            if not items:
-                self._log.write("[dim]no pending applications[/dim]")
-                return
-            t = Table(show_header=True, header_style="bold yellow", box=None)
-            t.add_column("applicant", style="bold")
-            t.add_column("message")
-            t.add_column("applied")
-            for r in items:
-                t.add_row(
-                    r["username"],
-                    r.get("message") or "—",
-                    _local_hhmmss(r["created_at"]),
-                )
-            self._log.write(t)
+        if my is None:
             self._log.write(
-                "[dim]approve:[/dim] [yellow]/alliance --approve <user>[/yellow]  "
-                "[dim]reject:[/dim] [yellow]/alliance --reject <user>[/yellow]"
+                "[dim]you are not in an alliance.[/dim] "
+                "[yellow]Browse and manage alliances on the web →[/yellow] "
+                "[cyan]/alliances on the dashboard[/cyan]"
             )
             return
-
-        mine = await self.app.client.my_alliance_request()
-        if mine is None:
-            self._log.write("[dim]no pending request[/dim]")
-            return
-        self._log.write(
-            f"[yellow]pending[/yellow] [{mine['alliance_tag']}] {mine['alliance_name']} "
-            f"[dim](applied {_local_hhmmss(mine['created_at'])})[/dim]  "
-            f"[dim]withdraw:[/dim] [yellow]/alliance --withdraw[/yellow]"
-        )
-
-    async def _alliance_decide(self, tail: list[str], *, approve: bool) -> None:
-        verb = "approve" if approve else "reject"
-        if not tail:
-            self._log.write(f"[red]usage:[/red] /alliance --{verb} <username>")
-            return
-        my = await self.app.client.my_alliance()
-        if my is None or my["founder_id"] != await self._me_user_id():
-            self._log.write(f"[red]only the founder can {verb} requests[/red]")
-            return
-        username = tail[0]
-        try:
-            if approve:
-                await self.app.client.approve_alliance_request(my["tag"], username)
-            else:
-                await self.app.client.reject_alliance_request(my["tag"], username)
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        if approve:
-            self._log.write(f"[green]approved[/green] {username} into [{my['tag']}]")
-        else:
-            self._log.write(f"[yellow]rejected[/yellow] {username}")
-
-    async def _alliance_withdraw(self) -> None:
-        try:
-            await self.app.client.withdraw_alliance_request()
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write("[green]request withdrawn[/green]")
-
-    async def _render_alliance(self, data: dict) -> None:
         header = Text()
-        header.append("━━━ ", style="bold yellow")
-        header.append(f"[{data['tag']}] {data['name']}", style="bold yellow")
-        header.append(f" · {data['member_count']} members ━━━", style="dim")
+        header.append(f"[{my['tag']}] ", style="bold yellow")
+        header.append(my["name"], style="bold")
+        header.append(f"  · {my['member_count']} members", style="dim")
         self._log.write(header)
-        if data.get("description"):
-            self._log.write(f"[dim]{data['description']}[/dim]")
-        self._log.write(f"[dim]founder:[/dim] [bold]{data['founder_username']}[/bold]")
-
+        if my.get("description"):
+            self._log.write(Text(my["description"], style="dim"))
         t = Table(show_header=True, header_style="bold yellow", box=None)
         t.add_column("player", style="bold")
         t.add_column("role", style="dim")
         t.add_column("joined", style="dim")
-        for m in data.get("members", []):
+        for m in my.get("members", []):
             role_style = "yellow" if m["role"] == "founder" else "dim"
             t.add_row(
                 m["username"],
@@ -2327,51 +2336,10 @@ class ReplScreen(Screen):
                 str(m["joined_at"])[:10],
             )
         self._log.write(t)
-
-    async def _cmd_found(self, args: list[str]) -> None:
-        if len(args) < 2:
-            self._log.write(
-                "[red]usage:[/red] /found <TAG> <name...> [dim](TAG = 2-6 alphanumeric chars)[/dim]"
-            )
-            return
-        tag = args[0]
-        name = " ".join(args[1:])
-        try:
-            data = await self.app.client.create_alliance(tag, name)
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
         self._log.write(
-            f"[green]founded[/green] [bold yellow][{data['tag']}][/bold yellow] {data['name']}"
+            "[dim]Manage your alliance — invites, applications, leave/dissolve — "
+            "on the web dashboard.[/dim]"
         )
-
-    async def _cmd_join(self, args: list[str]) -> None:
-        if not args:
-            self._log.write("[red]usage:[/red] /join <tag> [message]")
-            return
-        tag = args[0]
-        message = " ".join(args[1:]) if len(args) > 1 else ""
-        try:
-            data = await self.app.client.join_alliance(tag, message=message)
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write(
-            f"[green]request sent[/green] to [bold yellow][{data['alliance_tag']}][/bold yellow] "
-            f"{data['alliance_name']} — wait for the founder to approve"
-        )
-
-    async def _cmd_leave(self, args: list[str]) -> None:
-        my = await self.app.client.my_alliance()
-        if my is None:
-            self._log.write("[dim]you are not in any alliance[/dim]")
-            return
-        try:
-            await self.app.client.leave_alliance(my["tag"])
-        except APIError as exc:
-            self._log.write(f"[red]{exc.detail}[/red]")
-            return
-        self._log.write(f"[green]left[/green] [bold yellow][{my['tag']}][/bold yellow]")
 
     async def _cmd_refresh(self, args: list[str]) -> None:
         await self._refresh_planets()
@@ -2489,6 +2457,10 @@ class ReplScreen(Screen):
 
     # ------- Fleet / Shipyard / Espionage / Reports --------------------------
     async def _cmd_ships(self, args: list[str]) -> None:
+        # /ships         → list
+        # /ships build <type> <count> → queue ship build
+        if args and args[0].lower() == "build":
+            return await self._build_ship(args[1:])
         pid = self._require_planet()
         if pid is None:
             return
@@ -2508,9 +2480,9 @@ class ReplScreen(Screen):
         t.add_column("status")
         for s in data["ships"]:
             avail = s["prereq_met"]
-            base = "" if avail else "dim"
+            row_style = "" if avail else "dim"
             if not avail:
-                status = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="red")
+                status = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="bold red")
             elif (
                 cur_m < s["cost_metal"] or cur_c < s["cost_crystal"] or cur_d < s["cost_deuterium"]
             ):
@@ -2519,26 +2491,24 @@ class ReplScreen(Screen):
                 status = Text("ready", style="green")
             t.add_row(
                 Text(s["ship_type"], style="bold" if avail else "dim"),
-                Text(str(s["count"]), style=base or "yellow"),
-                Text(_fmt_int(s["cost_metal"]), style=base or "yellow"),
-                Text(_fmt_int(s["cost_crystal"]), style=base or "cyan"),
-                Text(_fmt_int(s["cost_deuterium"]), style=base or "magenta"),
-                Text(_fmt_seconds(s["build_seconds"]), style=base or ""),
+                Text(str(s["count"]), style=row_style),
+                Text(_fmt_int(s["cost_metal"]), style=row_style),
+                Text(_fmt_int(s["cost_crystal"]), style=row_style),
+                Text(_fmt_int(s["cost_deuterium"]), style=row_style),
+                Text(_fmt_seconds(s["build_seconds"]), style=row_style),
                 status,
             )
         self._log.write(Text(f"Shipyard L{data['shipyard_level']}", style="bold yellow"))
         self._log.write(t)
-        self._log.write("[dim]build:[/dim] [yellow]/build <ship_type> <count>[/yellow]")
+        self._log.write("[dim]build:[/dim] [yellow]/ships build <ship_type> <count>[/yellow]")
 
-    async def _cmd_build(self, args: list[str]) -> None:
-        """Ship production only. For buildings use /upgrade."""
+    async def _build_ship(self, args: list[str]) -> None:
+        """Helper for /ships build <type> <count>."""
         pid = self._require_planet()
         if pid is None:
             return
         if len(args) < 2:
-            self._log.write(
-                "[red]usage:[/red] /build <ship_type> <count>  [dim](buildings? use /upgrade)[/dim]"
-            )
+            self._log.write("[red]usage:[/red] /ships build <ship_type> <count>")
             return
         ship = args[0].lower()
         if ship in _BUILDING_KEYS:
@@ -2560,6 +2530,10 @@ class ReplScreen(Screen):
         )
 
     async def _cmd_defense(self, args: list[str]) -> None:
+        # /defense          → list
+        # /defense build <type> <count> → queue defense build
+        if args and args[0].lower() == "build":
+            return await self._build_defense(args[1:])
         pid = self._require_planet()
         if pid is None:
             return
@@ -2581,9 +2555,9 @@ class ReplScreen(Screen):
         t.add_column("status")
         for s in data["defenses"]:
             avail = s["prereq_met"]
-            base = "" if avail else "dim"
+            row_style = "" if avail else "dim"
             if not avail:
-                stat = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="red")
+                stat = Text("locked: " + ", ".join(s["prereq_missing"])[:40], style="bold red")
             elif s["unique"] and s["count"] >= 1:
                 stat = Text("built (max 1)", style="dim")
             elif (
@@ -2595,29 +2569,28 @@ class ReplScreen(Screen):
             label = s["defense_type"] + (" *" if s["unique"] else "")
             t.add_row(
                 Text(label, style="bold" if avail else "dim"),
-                Text(str(s["count"]), style=base or "yellow"),
-                Text(_fmt_int(s["cost_metal"]), style=base or "yellow"),
-                Text(_fmt_int(s["cost_crystal"]), style=base or "cyan"),
-                Text(_fmt_int(s["cost_deuterium"]), style=base or "magenta"),
-                Text(_fmt_int(s["structural_integrity"]), style=base or "dim"),
-                Text(_fmt_int(s["shield_power"]), style=base or "dim"),
-                Text(_fmt_int(s["weapon_power"]), style=base or "dim"),
+                Text(str(s["count"]), style=row_style),
+                Text(_fmt_int(s["cost_metal"]), style=row_style),
+                Text(_fmt_int(s["cost_crystal"]), style=row_style),
+                Text(_fmt_int(s["cost_deuterium"]), style=row_style),
+                Text(_fmt_int(s["structural_integrity"]), style=row_style),
+                Text(_fmt_int(s["shield_power"]), style=row_style),
+                Text(_fmt_int(s["weapon_power"]), style=row_style),
                 stat,
             )
         self._log.write(
             Text(f"Shipyard L{data['shipyard_level']}  [* = unique, max 1]", style="bold yellow")
         )
         self._log.write(t)
-        self._log.write("[dim]build:[/dim] [yellow]/defend <defense_type> <count>[/yellow]")
+        self._log.write("[dim]build:[/dim] [yellow]/defense build <defense_type> <count>[/yellow]")
 
-    async def _cmd_defend(self, args: list[str]) -> None:
+    async def _build_defense(self, args: list[str]) -> None:
+        """Helper for /defense build <type> <count>."""
         pid = self._require_planet()
         if pid is None:
             return
         if len(args) < 2:
-            self._log.write(
-                "[red]usage:[/red] /defend <defense_type> <count>  (e.g. /defend rocket_launcher 20)"
-            )
+            self._log.write("[red]usage:[/red] /defense build <defense_type> <count>")
             return
         dtype = args[0].lower()
         try:

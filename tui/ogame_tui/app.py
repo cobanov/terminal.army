@@ -33,7 +33,7 @@ SAKUSEN_DARK = Theme(
 
 
 class OGameApp(App):
-    TITLE = "sakusen"
+    TITLE = "terminal.army"
 
     def __init__(self, base_url: str = "http://localhost:8000", token: str | None = None) -> None:
         super().__init__()

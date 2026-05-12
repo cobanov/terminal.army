@@ -219,6 +219,9 @@ class OGameClient:
     async def leaderboard(self, limit: int = 50) -> dict[str, Any]:
         return await self._request("GET", "/api/leaderboard", params={"limit": limit})
 
+    async def my_points(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/me/points")
+
     # ----- Alliance -------------------------------------------------------
     async def list_alliances(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/api/alliances")

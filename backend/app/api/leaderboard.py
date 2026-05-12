@@ -36,6 +36,21 @@ class LeaderboardResponse(BaseModel):
     my_total: int | None = None
 
 
+class MyPoints(BaseModel):
+    building_points: int
+    research_points: int
+    fleet_points: int
+    defense_points: int
+    total_points: int
+
+
+@router.get("/me/points", response_model=MyPoints)
+async def get_my_points(user: CurrentUser, db: DBSession) -> MyPoints:
+    """Cheap per-user score breakdown — used by the TUI topbar."""
+    pts = await user_points(db, user.id)
+    return MyPoints(**pts)
+
+
 @router.get("/leaderboard", response_model=LeaderboardResponse)
 async def get_leaderboard(user: CurrentUser, db: DBSession, limit: int = 50) -> LeaderboardResponse:
     users_res = await db.execute(select(User).order_by(User.id))
