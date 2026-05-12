@@ -697,12 +697,25 @@ def _short_dt(iso_str: str) -> str:
 
 
 def _nav_text() -> Text:
-    """Categorized nav: PLANET / RESEARCH / FLEET / GALAXY / SOCIAL / HELP."""
-    sections: list[tuple[str, list[str]]] = [
-        ("PLANET", ["/planet", "/resources", "/facilities", "/upgrade", "/queue", "/cancel"]),
-        ("RESEARCH", ["/research", "/tree"]),
+    """Categorized nav with one accent color per category.
+
+    Color rules tie to the section's domain:
+      PLANET     → green   (the home/production stuff that earns you stuff)
+      RESEARCH   → magenta (long-term investment / science)
+      FLEET      → cyan    (ships and combat operations — same as MISSIONS panel)
+      GALAXY     → blue    (navigation / map / scouting context)
+      SOCIAL     → yellow  (diplomacy / human-facing)
+      STANDINGS  → yellow  (alliance + leaderboard share the diplomacy bucket)
+      HELP       → dim     (always-available reference, shouldn't compete)
+    """
+    sections: list[tuple[str, str, list[str]]] = [
         (
-            "FLEET",
+            "PLANET", "green",
+            ["/planet", "/resources", "/facilities", "/upgrade", "/queue", "/cancel"],
+        ),
+        ("RESEARCH", "magenta", ["/research", "/tree"]),
+        (
+            "FLEET", "cyan",
             [
                 "/ships",
                 "/build",
@@ -715,13 +728,13 @@ def _nav_text() -> Text:
                 "/reports",
             ],
         ),
-        ("GALAXY", ["/galaxy", "/planets", "/switch", "/logs"]),
-        ("SOCIAL", ["/msg", "/inbox"]),
-        ("STANDINGS", ["/leaderboard", "/alliances", "/alliance"]),
-        ("HELP", ["/help", "/quest", "/info", "/options"]),
+        ("GALAXY", "blue", ["/galaxy", "/planets", "/switch", "/logs"]),
+        ("SOCIAL", "yellow", ["/msg", "/inbox"]),
+        ("STANDINGS", "yellow", ["/leaderboard", "/alliances", "/alliance"]),
+        ("HELP", "dim", ["/help", "/quest", "/info", "/options"]),
     ]
     t = Text()
-    for i, (title, cmds) in enumerate(sections):
+    for i, (title, style, cmds) in enumerate(sections):
         if i > 0:
             t.append("\n")
         t.append(f"{title}\n", style="bold yellow")
@@ -729,7 +742,7 @@ def _nav_text() -> Text:
             # Sidebar shows the bare command name only — argument hints
             # (<g>:<s>:<p> etc.) live in /help and the autocomplete popup,
             # not in the always-visible nav.
-            t.append(f"  {cmd}\n", style="cyan")
+            t.append(f"  {cmd}\n", style=style)
     t.append("\n")
     t.append("HOTKEYS\n", style="bold yellow")
     t.append("  Tab    complete\n", style="dim")
@@ -1218,15 +1231,18 @@ class ReplScreen(Screen):
         self._planet_card.update(layout)
 
     def _render_right_panel(self) -> None:
-        # Color rules for this panel (kept intentionally narrow so the
-        # eye lands only on things that need action):
-        #   - All section headers       → bold yellow
-        #   - Body text                 → default foreground (no style)
-        #   - Secondary / metadata      → dim
-        #   - The active planet marker  → bold yellow (just the ▸)
-        #   - Things that need attention (hostile incoming, unread mail,
-        #     energy throttle) → red / magenta
-        # No green/cyan/magenta accents on routine text.
+        # Color rules mirror the left nav's categories so a queue/mission
+        # row carries the same hue as the command that produced it:
+        #   - All section headers → bold yellow
+        #   - PLANETS bodies      → green (matches left "PLANET" group)
+        #   - Planet code         → cyan (identifier/info color, matches FLEET)
+        #   - Active planet ▸     → bold yellow (single emphasis per row)
+        #   - QUEUES progress     → green (in progress = on track)
+        #   - MISSIONS outbound   → cyan (fleet ops)
+        #   - MISSIONS hostile    → red (alert)
+        #   - QUESTS              → magenta (long-term progression)
+        #   - MESSAGES alert      → magenta (unread)
+        #   - Metadata / coords / time → dim
         if self.app.current_planet_id is None:
             self._right.update("[dim]no planet[/dim]")
             return
@@ -1246,8 +1262,6 @@ class ReplScreen(Screen):
         for i, p in enumerate(self._planets_cache, start=1):
             under_attack = p["id"] in hostile_planet_ids
             is_current = p["id"] == cur_id
-            # Marker is the only colored bit per row; everything else is
-            # default text or dim.
             if under_attack and self._blink_phase:
                 body.append("⚠ ", style="bold red blink")
             elif is_current:
@@ -1255,8 +1269,12 @@ class ReplScreen(Screen):
             else:
                 body.append("  ")
             body.append(f"{i}. ", style="dim")
-            line = f"{p.get('code', '—')}#{p['name']}"
-            body.append(line + "\n", style="bold" if is_current else "")
+            # Code (identifier) cyan, name in green for current / default
+            # for others. Keeps the visual hierarchy: marker > name > code.
+            body.append(p.get("code", "—"), style="cyan")
+            body.append("#", style="dim")
+            name_style = "bold green" if is_current else "green"
+            body.append(f"{p['name']}\n", style=name_style)
             body.append(
                 f"     {p['galaxy']}:{p['system']}:{p['position']}  "
                 f"M {_fmt_int(p['resources_metal'])}\n",
@@ -1272,13 +1290,13 @@ class ReplScreen(Screen):
             for q in queue:
                 remaining = _remaining_str(q["finished_at"])
                 body.append(f"  #{q['id']} ", style="dim")
-                body.append(f"{q['item_key']}\n")
+                body.append(f"{q['item_key']}\n", style="green")
                 frac = _progress_fraction(q["started_at"], q["finished_at"])
                 filled, empty = _progress_bar(frac, width=10)
                 body.append("    ")
-                body.append(filled)
+                body.append(filled, style="green")
                 body.append(empty, style="dim")
-                body.append(f"  {remaining}\n", style="dim")
+                body.append(f"  {remaining}\n", style="green")
 
         # === 3) MISSIONS — active fleet operations ===
         body.append(
@@ -1291,12 +1309,17 @@ class ReplScreen(Screen):
             for inc in self._incoming_cache[:5]:
                 hostile = inc.get("is_hostile")
                 if hostile:
-                    # Hostile inbound: red prefix + name, body in default.
                     body.append("  ⚔ ", style="bold red")
-                    body.append(f"{inc['mission']} from {inc['sender_username']}\n")
+                    body.append(
+                        f"{inc['mission']} from {inc['sender_username']}\n",
+                        style="red",
+                    )
                 else:
                     body.append("  ↓ ", style="dim")
-                    body.append(f"{inc['mission']} from {inc['sender_username']}\n")
+                    body.append(
+                        f"{inc['mission']} from {inc['sender_username']}\n",
+                        style="cyan",
+                    )
                 body.append(
                     f"    → {inc['target_galaxy']}:{inc['target_system']}:{inc['target_position']}  "
                     f"{_remaining_str(inc['arrival_at'])}\n",
@@ -1305,10 +1328,11 @@ class ReplScreen(Screen):
             if len(self._incoming_cache) > 5:
                 body.append(f"  +{len(self._incoming_cache) - 5} more inbound\n", style="dim")
             for f in self._fleets_cache[:5]:
-                body.append("  → ", style="dim")
+                body.append("  → ", style="cyan")
                 body.append(
                     f"{f['mission']} → "
-                    f"{f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n"
+                    f"{f['target_galaxy']}:{f['target_system']}:{f['target_position']}\n",
+                    style="cyan",
                 )
                 body.append(
                     f"    {f['status']}  {_remaining_str(f['arrival_at'])}\n",
@@ -1324,10 +1348,10 @@ class ReplScreen(Screen):
             body.append(f"[{qd['done_count']}/{qd['total']}]\n", style="dim")
             cur = qd.get("current")
             if cur is None:
-                body.append("  all complete ✓\n", style="dim")
+                body.append("  all complete ✓\n", style="dim green")
             else:
                 body.append("  ▸ ", style="bold yellow")
-                body.append(f"{cur['title']}\n")
+                body.append(f"{cur['title']}\n", style="magenta")
 
         # === 5) MESSAGES ===
         body.append("\nMESSAGES ", style="bold yellow")
