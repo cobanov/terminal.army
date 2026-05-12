@@ -1097,8 +1097,6 @@ class ReplScreen(Screen):
                 f"M {_fmt_int(p['resources_metal'])}\n",
                 style="dim",
             )
-        body.append("\nswitch: ", style="dim")
-        body.append("/switch <#|CODE|name>\n", style="yellow")
 
         # === 2) QUEUES — build/research/ship/defense queue items ===
         queue = self._queue_cache
@@ -1157,7 +1155,6 @@ class ReplScreen(Screen):
                 body.append("  all complete ✓\n", style="dim green")
             else:
                 body.append(f"  ▸ {cur['title']}\n", style="cyan")
-                body.append("  /quest for more\n", style="dim")
 
         # === 5) MESSAGES ===
         body.append("\nMESSAGES  ", style="bold yellow")
