@@ -540,9 +540,12 @@ def _progress_bar(frac: float, width: int = 10) -> tuple[str, str]:
 # diffuse intensity (Lambertian). Terminal cells are ~2× taller than wide,
 # so the x-distance is scaled to keep the silhouette round.
 
-_GLOBE_W = 14
-_GLOBE_H = 7
-_GLOBE_CHARS = " .:-=+*#%@"
+_GLOBE_W = 18
+_GLOBE_H = 9
+# Smooth shading with Unicode block characters. Reads cleaner than the
+# ASCII ramp because every glyph has the same width and the visual
+# density step is consistent.
+_GLOBE_CHARS = " ·░▒▓█"
 
 
 def _planet_palette(position: int) -> str:
@@ -1149,14 +1152,14 @@ class ReplScreen(Screen):
             body.append(f"{en['production_factor'] * 100:.0f}%", style="bold red")
             body.append("; build a solar plant", style="red")
 
-        # ASCII rotating planet on the right. We build a two-column Table
-        # (text on the left, globe on the right) so Static can render it
-        # natively without spending column count on borders.
+        # ASCII rotating planet on the left, metrics on the right. Two-
+        # column Table.grid keeps the alignment clean without spending
+        # cells on borders.
         globe = _render_planet_globe(self._globe_angle, int(snap.get("position", 5)))
-        layout = Table.grid(expand=True, padding=(0, 0))
+        layout = Table.grid(expand=True, padding=(0, 1))
+        layout.add_column(width=_GLOBE_W, justify="left")
         layout.add_column(ratio=1)
-        layout.add_column(width=_GLOBE_W + 1, justify="right")
-        layout.add_row(body, globe)
+        layout.add_row(globe, body)
         self._planet_card.update(layout)
 
     def _render_right_panel(self) -> None:
