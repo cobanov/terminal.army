@@ -13,6 +13,9 @@ class QueueItemRead(BaseModel):
     queue_type: str
     item_key: str
     target_level: int
+    cost_metal: int
+    cost_crystal: int
+    cost_deuterium: int
     started_at: datetime
     finished_at: datetime
     cancelled: bool

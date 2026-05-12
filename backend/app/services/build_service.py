@@ -181,6 +181,37 @@ async def cancel_queue_item(db: AsyncSession, queue_id: int, user_id: int) -> Bu
     planet.resources_crystal = float(planet.resources_crystal) + queue.cost_crystal
     planet.resources_deuterium = float(planet.resources_deuterium) + queue.cost_deuterium
     queue.cancelled = True
+
+    # Shift later items in the same planet+queue_type so the slot the
+    # cancelled item was occupying doesn't leave a gap. Two cases:
+    #   1. cancelled item is currently running (started_at <= now): shift by
+    #      its REMAINING time, since the elapsed portion is already gone.
+    #   2. cancelled item is queued but not started: shift by its full
+    #      duration.
+    # Unified as `finished_at - max(now, started_at)`.
+    now = datetime.now(UTC)
+    started_at = queue.started_at
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=UTC)
+    finished_at = queue.finished_at
+    if finished_at.tzinfo is None:
+        finished_at = finished_at.replace(tzinfo=UTC)
+    shift = finished_at - max(now, started_at)
+    if shift.total_seconds() > 0:
+        later_res = await db.execute(
+            select(BuildQueue).where(
+                BuildQueue.planet_id == queue.planet_id,
+                BuildQueue.queue_type == queue.queue_type,
+                BuildQueue.cancelled.is_(False),
+                BuildQueue.applied.is_(False),
+                BuildQueue.id != queue.id,
+                BuildQueue.started_at >= queue.finished_at,
+            )
+        )
+        for item in later_res.scalars().all():
+            item.started_at = item.started_at - shift
+            item.finished_at = item.finished_at - shift
+
     await db.commit()
     await db.refresh(queue)
     return queue
