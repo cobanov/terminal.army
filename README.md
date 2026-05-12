@@ -35,7 +35,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2) Install + run the client
 uv tool install --python 3.12 "git+https://github.com/cobanov/space-galactic-tui.git"
-terminal-army
+tarmy
 ```
 
 On first launch it opens a browser URL for you to sign up at
@@ -43,6 +43,15 @@ On first launch it opens a browser URL for you to sign up at
 the terminal — the TUI takes over.
 
 No further config needed. The CLI defaults to `https://terminal.army`.
+
+### Updating
+
+```bash
+tarmy --update
+```
+
+Pulls the latest version from github and reinstalls in-place. Re-run
+`tarmy` after it finishes.
 
 <!-- ⬇ screenshot of the login / signup flow -->
 ![signup](docs/screenshots/signup.png)

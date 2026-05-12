@@ -224,26 +224,75 @@ def _get_or_acquire_credentials(backend_url: str) -> str:
     return new_token
 
 
+_GIT_INSTALL_URL = "git+https://github.com/cobanov/space-galactic-tui.git"
+
+
+def _self_update() -> int:
+    """Re-install the CLI from the public git URL via `uv tool install`.
+
+    Works whether the user installed under the new (tarmy / terminal-army)
+    name or the legacy aliases — `uv tool install --reinstall` rebuilds
+    the active install in-place.
+    """
+    import shutil
+    import subprocess
+
+    uv = shutil.which("uv")
+    if uv is None:
+        print(
+            _color(
+                "uv is not on PATH — install it first:\n"
+                "  curl -LsSf https://astral.sh/uv/install.sh | sh",
+                ANSI_RED,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    cmd = [
+        uv,
+        "tool",
+        "install",
+        "--reinstall",
+        "--python",
+        "3.12",
+        _GIT_INSTALL_URL,
+    ]
+    print(_color(f"updating from {_GIT_INSTALL_URL}", ANSI_CYAN), file=sys.stderr)
+    try:
+        rc = subprocess.call(cmd)
+    except OSError as exc:
+        print(_color(f"uv failed: {exc}", ANSI_RED), file=sys.stderr)
+        return 1
+    if rc != 0:
+        print(_color(f"update failed (uv exited {rc})", ANSI_RED), file=sys.stderr)
+        return rc
+    print(
+        _color("✓ updated. Re-run tarmy to start the new build.", ANSI_GREEN),
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="sakusen",
+        prog="tarmy",
         description="terminal.army — multiplayer space strategy from your terminal",
         epilog=(
-            "Default: connects to $SAKUSEN_BACKEND (or legacy $OGAME_BACKEND), "
-            "otherwise starts solo mode. "
-            'For multiplayer: export SAKUSEN_BACKEND="http://operator-host:9931"'
+            "Default: connects to $TA_BACKEND (or legacy $SAKUSEN_BACKEND / "
+            "$OGAME_BACKEND), falling back to https://terminal.army. "
+            "Solo offline: tarmy --solo."
         ),
     )
     parser.add_argument(
         "--remote",
         "-r",
         default=None,
-        help="Backend URL (multiplayer). Overrides $SAKUSEN_BACKEND.",
+        help="Backend URL (multiplayer). Overrides $TA_BACKEND.",
     )
     parser.add_argument(
         "--solo",
         action="store_true",
-        help="Force solo mode (local SQLite). Ignores $SAKUSEN_BACKEND.",
+        help="Force solo mode (local SQLite). Ignores $TA_BACKEND.",
     )
     parser.add_argument(
         "--data-dir",
@@ -255,7 +304,15 @@ def main() -> None:
         action="store_true",
         help="Delete saved key for this backend and exit.",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="Re-install the CLI from the public github URL and exit.",
+    )
     args = parser.parse_args()
+
+    if args.update:
+        sys.exit(_self_update())
 
     # Resolution order: --remote, then SAKUSEN_BACKEND env, then the public
     # default. --solo overrides everything to spin up a local sqlite backend.
