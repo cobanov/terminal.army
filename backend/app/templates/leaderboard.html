@@ -2,19 +2,7 @@
 {% block title %}Leaderboard · sakusen{% endblock %}
 
 {% block content %}
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN</span>
-    <span class="topbar-server">{{ server_name }}</span>
-    <span class="topbar-user">leaderboard</span>
-  </div>
-  <div class="topbar-right">
-    <a href="/dashboard">&larr; dashboard</a>
-    <a href="/me" style="margin-left:1rem;">account</a>
-    <a href="/alliances" style="margin-left:1rem;">alliances</a>
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
+{% include "_topbar.html" %}
 
 <div class="card">
   <h2 class="card-title">Top players <small>{{ rows|length }} of {{ total_players }} · {{ server_name }}</small></h2>

@@ -1,22 +1,35 @@
-<meta http-equiv="refresh" content="10">
 <div class="topbar">
   <div class="topbar-left">
     <span class="topbar-brand">SAKUSEN</span>
-    <span class="topbar-server">{{ server_name }} · {{ registered_count }}/{{ server_max_users }}</span>
-    <span class="topbar-user">commander <b>{{ user.username }}</b>{% if alliance_tag %} <span style="color:#fbbf24;">[{{ alliance_tag }}]</span>{% endif %}</span>
+    {% if server_name is defined %}
+      <span class="topbar-server">
+        {{ server_name }}{% if registered_count is defined and server_max_users is defined %} · {{ registered_count }}/{{ server_max_users }}{% endif %}
+      </span>
+    {% endif %}
+    {% if user is defined and user %}
+      <span class="topbar-user">
+        commander <b>{{ user.username }}</b>{% if alliance_tag %} <span style="color:#fbbf24;">[{{ alliance_tag }}]</span>{% endif %}
+      </span>
+    {% endif %}
   </div>
   <div class="topbar-right">
-    {% if lobby_url %}<a href="{{ lobby_url }}" style="margin-right:1rem;">&larr; lobby</a>{% endif %}
-    {% if unread > 0 %}
-      <span class="ok">✉ {{ unread }} new</span>
-    {% else %}
-      <span style="color:#525252">✉ inbox</span>
+    {% if unread is defined and unread > 0 %}
+      <span class="ok" style="margin-right:1rem;">✉ {{ unread }} new</span>
     {% endif %}
-    <a href="/dashboard">refresh</a>
-    <a href="/me">account</a>
-    <a href="/leaderboard">ranking</a>
-    <a href="/alliances">alliances</a>
-    {% if is_admin %}<a href="/admin">admin</a>{% endif %}
-    <a href="/logout">logout</a>
+    <details class="nav-menu">
+      <summary class="hamburger" aria-label="menu">
+        <span class="hamburger-icon">≡</span>
+        <span class="hamburger-label">menu</span>
+      </summary>
+      <nav class="nav-menu-list">
+        <a href="/dashboard">dashboard</a>
+        <a href="/me">account</a>
+        <a href="/leaderboard">ranking</a>
+        <a href="/alliances">alliances</a>
+        {% if is_admin is defined and is_admin %}<a href="/admin" class="nav-admin">admin</a>{% endif %}
+        {% if lobby_url is defined and lobby_url %}<a href="{{ lobby_url }}">&larr; lobby</a>{% endif %}
+        <a href="/logout" class="nav-danger">logout</a>
+      </nav>
+    </details>
   </div>
 </div>

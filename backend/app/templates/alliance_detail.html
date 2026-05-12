@@ -2,18 +2,7 @@
 {% block title %}[{{ alliance.tag }}] {{ alliance.name }} · sakusen{% endblock %}
 
 {% block content %}
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN</span>
-    <span class="topbar-server">{{ server_name }}</span>
-    <span class="topbar-user">alliance [{{ alliance.tag }}]</span>
-  </div>
-  <div class="topbar-right">
-    <a href="/alliances">&larr; all alliances</a>
-    <a href="/dashboard" style="margin-left:1rem;">dashboard</a>
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
+{% include "_topbar.html" %}
 
 <div class="card">
   <h2 class="card-title">

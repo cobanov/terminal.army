@@ -2,20 +2,7 @@
 {% block title %}Account · sakusen{% endblock %}
 
 {% block content %}
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN</span>
-    <span class="topbar-server">{{ server_name }}</span>
-    <span class="topbar-user">account</span>
-  </div>
-  <div class="topbar-right">
-    <a href="/dashboard">dashboard</a>
-    <a href="/leaderboard" style="margin-left:1rem;">ranking</a>
-    <a href="/alliances" style="margin-left:1rem;">alliances</a>
-    {% if is_admin %}<a href="/admin" style="margin-left:1rem;">admin</a>{% endif %}
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
+{% include "_topbar.html" %}
 
 <div class="card">
   <h2 class="card-title">Profile <small>commander</small></h2>

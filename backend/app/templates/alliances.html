@@ -2,19 +2,7 @@
 {% block title %}Alliances · sakusen{% endblock %}
 
 {% block content %}
-<div class="topbar">
-  <div class="topbar-left">
-    <span class="topbar-brand">SAKUSEN</span>
-    <span class="topbar-server">{{ server_name }}</span>
-    <span class="topbar-user">alliances</span>
-  </div>
-  <div class="topbar-right">
-    <a href="/dashboard">&larr; dashboard</a>
-    <a href="/me" style="margin-left:1rem;">account</a>
-    <a href="/leaderboard" style="margin-left:1rem;">ranking</a>
-    <a href="/logout" style="margin-left:1rem;">logout</a>
-  </div>
-</div>
+{% include "_topbar.html" %}
 
 {% if err %}<div class="err">{{ err }}</div>{% endif %}
 {% if ok %}<div class="ok-banner">{{ ok }}</div>{% endif %}
