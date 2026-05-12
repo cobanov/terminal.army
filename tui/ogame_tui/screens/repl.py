@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import shlex
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -562,18 +563,55 @@ def _planet_palette(position: int) -> str:
     return "bright_white"
 
 
-def _render_planet_globe(angle: float, position: int) -> Text:
-    """Return a multi-line Text of the rotating sphere at the given angle.
+def _planet_signature(seed: str) -> dict:
+    """Deterministic parameters for one planet's globe.
 
-    Terminal cells are roughly 2x taller than wide, so we use W = 2*H and
-    normalize the per-cell coordinates so that the box maps to a unit
-    square in physical pixels — the result reads as a round sphere.
+    Same seed → identical sphere every time. The seed is normally the
+    planet's short code ("WJZM"); falls back to "0" for safety.
+    """
+    rng = random.Random(seed or "0")
+    return {
+        # Five sinusoids with random frequencies and phases form a unique
+        # continent pattern over (lat, lon). Five is enough variety that
+        # two seeds rarely look alike.
+        "freqs": [rng.uniform(2.2, 5.5) for _ in range(5)],
+        "phases": [rng.uniform(0, 2 * math.pi) for _ in range(5)],
+        "weights": [rng.uniform(0.5, 1.1) for _ in range(5)],
+        # Threshold controls landmass share: 0.0 → mostly land, 0.8 → ocean planet.
+        "land_threshold": rng.uniform(0.0, 0.6),
+        # Light direction varies per planet so they don't all face the
+        # same way — but stays close to head-on so most of the disk stays
+        # lit. ±0.4 rad → about 75% of the sphere visible.
+        "light_angle": rng.uniform(-0.4, 0.4),
+        # Polar caps when cold planets are well-rendered with a brighter
+        # band at high latitude. Larger value → more cap.
+        "ice_cap": rng.uniform(0.55, 0.85),
+    }
+
+
+def _render_planet_globe(seed: str, position: int) -> Text:
+    """Static, deterministic globe for a single planet.
+
+    Continents come from a noise function parameterised by the planet's
+    code seed (see `_planet_signature`). The result is always the same
+    image for the same planet — no animation, no tick cost.
     """
     color = _planet_palette(position)
-    lx = math.cos(angle)
-    lz = math.sin(angle)
+    sig = _planet_signature(seed)
+    # Light vector in the (x, z) plane; angle is per-planet so they don't
+    # all face the same way.
+    lx = math.cos(sig["light_angle"])
+    lz = math.sin(sig["light_angle"])
     half_w = _GLOBE_W / 2
     half_h = _GLOBE_H / 2
+    nlen = len(_GLOBE_CHARS) - 1
+    f = sig["freqs"]
+    ph = sig["phases"]
+    wt = sig["weights"]
+    thresh = sig["land_threshold"]
+    ice = position >= 13
+    ice_lat = sig["ice_cap"]
+
     text = Text()
     for y in range(_GLOBE_H):
         ny = (y + 0.5 - half_h) / half_h
@@ -584,10 +622,28 @@ def _render_planet_globe(angle: float, position: int) -> Text:
                 text.append(" ")
                 continue
             nz = math.sqrt(1 - r2)
-            # Lambert diffuse with light at (lx, 0, lz). Normal.y = ny
-            # but the light's Y component is 0, so it drops out.
+            # Lambert diffuse. Light Y = 0 so it drops out of the dot product.
             d = max(0.0, nx * lx + nz * lz)
-            idx = min(len(_GLOBE_CHARS) - 1, int(d * (len(_GLOBE_CHARS) - 1) + 0.5))
+            if d < 0.05:
+                text.append(" ")
+                continue
+            lat = math.asin(max(-1.0, min(1.0, ny)))
+            lon = math.atan2(nx, nz)
+            # Polar ice on cold planets — always lit-bright, ignores the
+            # land/sea pattern past a latitude threshold.
+            if ice and abs(ny) > ice_lat:
+                idx = nlen
+            else:
+                v = (
+                    wt[0] * math.sin(f[0] * lon + ph[0])
+                    + wt[1] * math.cos(f[1] * lat + ph[1])
+                    + wt[2] * math.sin(f[2] * lon + f[3] * lat + ph[2])
+                    + wt[3] * math.cos(f[3] * lat - f[2] * lon + ph[3])
+                    + wt[4] * math.sin(f[4] * (lon + lat) + ph[4])
+                )
+                land = v > thresh
+                density = d * (1.0 if land else 0.55)
+                idx = max(1, min(nlen, int(density * nlen + 0.5)))
             text.append(_GLOBE_CHARS[idx], style=color)
         if y < _GLOBE_H - 1:
             text.append("\n")
@@ -889,8 +945,6 @@ class ReplScreen(Screen):
         self._quest_cache: dict[str, Any] | None = None
         # Toggles each tick so we can blink red planets under attack.
         self._blink_phase: bool = False
-        # Light-rotation angle for the ASCII planet globe in the planet card.
-        self._globe_angle: float = 0.0
         self._buildings_cache: dict[str, int] = {}
         self._tech_levels_cache: dict[str, int] = {}
         self._max_lab_level: int = 0
@@ -956,8 +1010,6 @@ class ReplScreen(Screen):
 
     def _tick(self) -> None:
         self._blink_phase = not self._blink_phase
-        # Advance the globe a small step each tick → smooth spin at 1 Hz.
-        self._globe_angle = (self._globe_angle + 0.25) % (2 * math.pi)
         self._render_top_bar()
         self._render_planet_card()
         self._render_right_panel()
@@ -1152,10 +1204,13 @@ class ReplScreen(Screen):
             body.append(f"{en['production_factor'] * 100:.0f}%", style="bold red")
             body.append("; build a solar plant", style="red")
 
-        # ASCII rotating planet on the left, metrics on the right. Two-
-        # column Table.grid keeps the alignment clean without spending
-        # cells on borders.
-        globe = _render_planet_globe(self._globe_angle, int(snap.get("position", 5)))
+        # Generative ASCII planet on the left, metrics on the right. The
+        # image is derived from the planet's short code so every planet
+        # gets a stable, unique sphere — no animation, no per-tick cost.
+        globe = _render_planet_globe(
+            str(snap.get("code") or snap.get("id") or "0"),
+            int(snap.get("position", 5)),
+        )
         layout = Table.grid(expand=True, padding=(0, 1))
         layout.add_column(width=_GLOBE_W, justify="left")
         layout.add_column(ratio=1)
