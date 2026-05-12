@@ -721,68 +721,72 @@ class ReplScreen(Screen):
         Binding("down", "suggest_next", "Next", show=False, priority=True),
     ]
 
+    # Structural colors come from Textual theme variables so /options
+    # --theme actually changes the visible palette. Foreground text uses
+    # Rich's named colors (bold yellow / cyan / dim) — those keep their
+    # terminal-palette look across themes.
     DEFAULT_CSS = """
     ReplScreen {
-        background: #000000;
+        background: $background;
     }
     #topbar {
         height: 3;
-        background: #0a0a0a;
-        border-bottom: solid #262626;
+        background: $surface;
+        border-bottom: solid $boost;
     }
     #top-left {
         width: 1fr;
         height: 2;
-        background: #0a0a0a;
-        color: #d4d4d4;
+        background: $surface;
+        color: $foreground;
         padding: 0 1;
     }
     #top-right {
         width: auto;
         height: 2;
-        background: #0a0a0a;
-        color: #d4d4d4;
+        background: $surface;
+        color: $foreground;
         padding: 0 1;
         text-align: right;
     }
     #cols {
         height: 1fr;
-        background: #000000;
+        background: $background;
     }
     #left-panel {
         width: 24;
-        background: #0a0a0a;
-        border-right: solid #262626;
+        background: $surface;
+        border-right: solid $boost;
         padding: 0 1;
     }
     #center-panel {
         width: 1fr;
-        background: #000000;
+        background: $background;
     }
     #right-panel {
         width: 34;
-        background: #0a0a0a;
-        border-left: solid #262626;
+        background: $surface;
+        border-left: solid $boost;
         padding: 0 1;
     }
     #planet-card {
         height: 11;
-        background: #000000;
-        border-bottom: solid #262626;
+        background: $background;
+        border-bottom: solid $boost;
         padding: 0 1;
     }
     #log {
         height: 1fr;
-        background: #000000;
+        background: $background;
         padding: 0 1;
     }
     #suggestions {
         height: auto;
         max-height: 10;
-        background: #0a0a0a;
+        background: $surface;
         border: none;
-        border-top: solid #fbbf24;
-        color: #d4d4d4;
+        border-top: solid $accent;
+        color: $foreground;
         padding: 0;
         scrollbar-size: 1 1;
     }
@@ -793,16 +797,16 @@ class ReplScreen(Screen):
         padding: 0 1;
     }
     #suggestions > .option-list--option-highlighted {
-        background: #262626;
-        color: #fbbf24;
+        background: $boost;
+        color: $accent;
     }
     #suggestions:focus > .option-list--option-highlighted {
-        background: #262626;
-        color: #fbbf24;
+        background: $boost;
+        color: $accent;
     }
     #prompt {
-        background: #0a0a0a;
-        color: #e5e5e5;
+        background: $surface;
+        color: $foreground;
         border: none;
         height: 3;
     }
