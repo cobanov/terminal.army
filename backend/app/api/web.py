@@ -76,8 +76,12 @@ async def _user_from_cookie(token: str | None, db: AsyncSession) -> User | None:
 def _set_auth_cookie(resp: Response, token: str, request: Request | None = None) -> None:
     settings = get_settings()
     max_age_sec = max(30 * 24 * 3600, settings.jwt_expire_minutes * 60)
-    secure = False
-    if request is not None:
+    # In prod we always issue a Secure cookie. The backend sits behind a
+    # TLS-terminating proxy (Cloudflare, Caddy, etc.) so the first hop is
+    # always https; even if X-Forwarded-Proto is missing or stripped, we
+    # never want to fall back to an unsecured cookie on a public deploy.
+    secure = settings.env == "prod"
+    if not secure and request is not None:
         if request.url.scheme == "https":
             secure = True
         elif request.headers.get("x-forwarded-proto") == "https":
